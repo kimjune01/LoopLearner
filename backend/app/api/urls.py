@@ -11,6 +11,8 @@ from .views import (
     GetOptimizationProgressView,
     HealthCheckView,
     GetSystemMetricsView,
+    GetSystemPromptView,
+    ExportSystemPromptView,
 )
 from .optimization_status_controller import (
     OptimizationStatusView,
@@ -42,6 +44,10 @@ urlpatterns = [
     path('system/state/', GetSystemStateView.as_view(), name='get-system-state'),
     path('system/export/', ExportSystemStateView.as_view(), name='export-system-state'),
     path('system/import/', ImportSystemStateView.as_view(), name='import-system-state'),
+    
+    # System prompt endpoints
+    path('system/prompt/', GetSystemPromptView.as_view(), name='get-system-prompt'),
+    path('system/prompt/export/', ExportSystemPromptView.as_view(), name='export-system-prompt'),
     
     # Optimization endpoints
     path('optimization/trigger/', TriggerOptimizationView.as_view(), name='trigger-optimization'),

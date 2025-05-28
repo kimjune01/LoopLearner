@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Dashboard from './components/Dashboard'
 import DemoWorkflow from './components/DemoWorkflow'
+import SystemPrompt from './components/SystemPrompt'
 
 interface Email {
   id: number
@@ -18,7 +19,7 @@ interface Draft {
 }
 
 function App() {
-  const [currentView, setCurrentView] = useState<'demo' | 'dashboard' | 'workflow'>('demo')
+  const [currentView, setCurrentView] = useState<'demo' | 'dashboard' | 'workflow' | 'prompt'>('demo')
   const [currentEmail, setCurrentEmail] = useState<Email | null>(null)
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [selectedDraft, setSelectedDraft] = useState<Draft | null>(null)
@@ -178,6 +179,16 @@ function App() {
               >
                 Dashboard
               </button>
+              <button 
+                className={`px-6 py-3 rounded-lg font-medium transition-all ${
+                  currentView === 'prompt' 
+                    ? 'bg-white text-blue-600 shadow-lg' 
+                    : 'bg-white/20 text-white border-2 border-white/30 hover:bg-white/30'
+                }`}
+                onClick={() => setCurrentView('prompt')}
+              >
+                System Prompt
+              </button>
             </nav>
           </div>
         </div>
@@ -188,6 +199,8 @@ function App() {
           <Dashboard />
         ) : currentView === 'workflow' ? (
           <DemoWorkflow />
+        ) : currentView === 'prompt' ? (
+          <SystemPrompt />
         ) : (
           <div className="max-w-5xl mx-auto px-6 py-8">
             {error && (

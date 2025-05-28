@@ -488,3 +488,153 @@ class GetSystemMetricsView(EmailAPIView):
             },
             'timestamp': datetime.now().isoformat()
         })
+
+
+class GetSystemPromptView(EmailAPIView):
+    """Get current active system prompt"""
+    
+    def get(self, request):
+        try:
+            # Get the most recent active system prompt
+            system_prompt = SystemPrompt.objects.filter(is_active=True).order_by('-created_at').first()
+            
+            if not system_prompt:
+                # Fallback to latest prompt if no active one
+                system_prompt = SystemPrompt.objects.order_by('-created_at').first()
+            
+            if not system_prompt:
+                return Response({
+                    'error': 'No system prompt found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            return Response({
+                'id': system_prompt.id,
+                'version': system_prompt.version,
+                'content': system_prompt.content,
+                'is_active': system_prompt.is_active,
+                'created_at': system_prompt.created_at.isoformat(),
+                'updated_at': system_prompt.created_at.isoformat(),  # Use created_at since no updated_at field
+                'scenario_type': getattr(system_prompt, 'scenario_type', 'general'),
+                'performance_score': getattr(system_prompt, 'performance_score', None),
+                'metadata': {
+                    'word_count': len(system_prompt.content.split()),
+                    'character_count': len(system_prompt.content),
+                    'line_count': len(system_prompt.content.splitlines())
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"Error retrieving system prompt: {str(e)}")
+            return Response({
+                'error': 'Failed to retrieve system prompt'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ExportSystemPromptView(EmailAPIView):
+    """Export system prompt in various formats"""
+    
+    def get(self, request):
+        export_format = request.GET.get('format', 'json').lower()
+        include_metadata = request.GET.get('include_metadata', 'true').lower() == 'true'
+        
+        try:
+            # Get the most recent active system prompt
+            system_prompt = SystemPrompt.objects.filter(is_active=True).order_by('-created_at').first()
+            
+            if not system_prompt:
+                system_prompt = SystemPrompt.objects.order_by('-created_at').first()
+            
+            if not system_prompt:
+                return Response({
+                    'error': 'No system prompt found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Prepare data
+            prompt_data = {
+                'content': system_prompt.content,
+                'version': system_prompt.version,
+                'is_active': system_prompt.is_active,
+            }
+            
+            if include_metadata:
+                prompt_data.update({
+                    'id': system_prompt.id,
+                    'created_at': system_prompt.created_at.isoformat(),
+                    'updated_at': system_prompt.created_at.isoformat(),  # Use created_at since no updated_at field
+                    'scenario_type': getattr(system_prompt, 'scenario_type', 'general'),
+                    'performance_score': getattr(system_prompt, 'performance_score', None),
+                    'metadata': {
+                        'word_count': len(system_prompt.content.split()),
+                        'character_count': len(system_prompt.content),
+                        'line_count': len(system_prompt.content.splitlines())
+                    }
+                })
+            
+            from django.http import HttpResponse
+            
+            if export_format == 'json':
+                response = HttpResponse(
+                    json.dumps(prompt_data, indent=2),
+                    content_type='application/json'
+                )
+                response['Content-Disposition'] = f'attachment; filename="system_prompt_v{system_prompt.version}.json"'
+                
+            elif export_format == 'txt':
+                content = system_prompt.content
+                if include_metadata:
+                    content = f"""# System Prompt v{system_prompt.version}
+# Created: {system_prompt.created_at.isoformat()}
+# Active: {system_prompt.is_active}
+# Scenario: {getattr(system_prompt, 'scenario_type', 'general')}
+
+{system_prompt.content}"""
+                
+                response = HttpResponse(
+                    content,
+                    content_type='text/plain'
+                )
+                response['Content-Disposition'] = f'attachment; filename="system_prompt_v{system_prompt.version}.txt"'
+                
+            elif export_format == 'md':
+                content = f"""# System Prompt v{system_prompt.version}
+
+"""
+                if include_metadata:
+                    content += f"""**Version:** {system_prompt.version}  
+**Created:** {system_prompt.created_at.isoformat()}  
+**Active:** {system_prompt.is_active}  
+**Scenario:** {getattr(system_prompt, 'scenario_type', 'general')}  
+
+"""
+                
+                content += f"""## Content
+
+```
+{system_prompt.content}
+```
+
+## Statistics
+
+- **Word Count:** {len(system_prompt.content.split())}
+- **Character Count:** {len(system_prompt.content)}
+- **Line Count:** {len(system_prompt.content.splitlines())}
+"""
+                
+                response = HttpResponse(
+                    content,
+                    content_type='text/markdown'
+                )
+                response['Content-Disposition'] = f'attachment; filename="system_prompt_v{system_prompt.version}.md"'
+                
+            else:
+                return Response({
+                    'error': f'Unsupported export format: {export_format}. Supported formats: json, txt, md'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error exporting system prompt: {str(e)}")
+            return Response({
+                'error': 'Failed to export system prompt'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
