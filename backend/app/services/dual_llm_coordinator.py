@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Tuple
 from django.db import models
 from core.models import Email, SystemPrompt, Draft, UserFeedback
-from .prompt_rewriter import PromptRewriter, RewriteContext, RewriteCandidate
+from .prompt_rewriter import PromptRewriter, RewriteContext, RewriteCandidate, LLMBasedPromptRewriter
 from .reward_aggregator import RewardFunctionAggregator
 from .meta_prompt_manager import MetaPromptManager
 from dataclasses import dataclass

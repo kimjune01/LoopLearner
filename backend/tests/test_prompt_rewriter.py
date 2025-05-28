@@ -3,7 +3,7 @@ import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from asgiref.sync import sync_to_async
 from app.services.prompt_rewriter import (
-    PPOPromptRewriter, 
+    LLMBasedPromptRewriter, 
     RewriteCandidate, 
     RewriteContext,
     PromptRewriter
@@ -34,6 +34,14 @@ async def mock_meta_prompt_manager():
     mock_manager = AsyncMock()
     mock_manager.get_meta_prompt = AsyncMock(return_value="Rewrite this prompt to be more effective:")
     return mock_manager
+
+
+@pytest_asyncio.fixture
+async def mock_similarity_llm():
+    """Mock LLM provider for similarity matching"""
+    mock_llm = AsyncMock()
+    mock_llm.generate = AsyncMock(return_value='[{"prompt_id": 1, "similarity": 0.8, "reason": "similar tone"}]')
+    return mock_llm
 
 
 @pytest_asyncio.fixture
@@ -73,47 +81,47 @@ async def rewrite_context(system_prompt, test_email):
 
 
 @pytest_asyncio.fixture
-def ppo_rewriter(mock_rewriter_llm, mock_reward_aggregator, mock_meta_prompt_manager):
-    """PPO-based prompt rewriter instance"""
-    return PPOPromptRewriter(
+def llm_rewriter(mock_rewriter_llm, mock_similarity_llm, mock_reward_aggregator, mock_meta_prompt_manager):
+    """LLM-based prompt rewriter instance"""
+    return LLMBasedPromptRewriter(
         rewriter_llm_provider=mock_rewriter_llm,
+        similarity_llm_provider=mock_similarity_llm,
         reward_function_aggregator=mock_reward_aggregator,
-        meta_prompt_manager=mock_meta_prompt_manager,
-        kl_penalty=0.02
+        meta_prompt_manager=mock_meta_prompt_manager
     )
 
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_ppo_prompt_rewriter_implements_interface(ppo_rewriter):
-    """Test that PPOPromptRewriter implements PromptRewriter interface"""
-    assert isinstance(ppo_rewriter, PromptRewriter)
-    assert hasattr(ppo_rewriter, 'rewrite_prompt')
-    assert hasattr(ppo_rewriter, 'select_best_candidate')
+async def test_llm_prompt_rewriter_implements_interface(llm_rewriter):
+    """Test that LLMBasedPromptRewriter implements PromptRewriter interface"""
+    assert isinstance(llm_rewriter, PromptRewriter)
+    assert hasattr(llm_rewriter, 'rewrite_prompt')
+    assert hasattr(llm_rewriter, 'select_best_candidate')
 
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_rewrite_prompt_conservative_mode(ppo_rewriter, rewrite_context):
-    """Test prompt rewriting in conservative mode (PRewrite-I)"""
+async def test_rewrite_prompt_conservative_mode(llm_rewriter, rewrite_context):
+    """Test prompt rewriting in conservative mode with similarity matching"""
     # Setup mock LLM response
-    ppo_rewriter.rewriter_llm.generate.return_value = "You are an enhanced email assistant that provides professional responses."
+    llm_rewriter.rewriter_llm.generate.return_value = "You are an enhanced email assistant that provides professional responses."
     
     # Test conservative rewriting
-    candidates = await ppo_rewriter.rewrite_prompt(rewrite_context, mode="conservative")
+    candidates = await llm_rewriter.rewrite_prompt(rewrite_context, mode="conservative")
     
     # Verify results
     assert isinstance(candidates, list)
     assert len(candidates) == 1  # Conservative mode should return single candidate
     assert isinstance(candidates[0], RewriteCandidate)
-    assert candidates[0].temperature == 0.0  # Greedy decoding
+    assert candidates[0].temperature == 0.1  # Low temperature for consistency
     assert candidates[0].confidence == 0.9   # High confidence
     assert "enhanced email assistant" in candidates[0].content
 
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_rewrite_prompt_exploratory_mode(ppo_rewriter, rewrite_context):
+async def test_rewrite_prompt_exploratory_mode(llm_rewriter, rewrite_context):
     """Test prompt rewriting in exploratory mode (PRewrite-S)"""
     # Setup mock LLM to return different responses for multiple calls
     responses = [
