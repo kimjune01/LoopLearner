@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 from core.models import UserFeedback, SystemPrompt, EvaluationSnapshot
 from asgiref.sync import sync_to_async
+from django.db import models
 
 
 class PromptOptimizer(ABC):
@@ -74,8 +75,13 @@ class LLMBasedOptimizer(PromptOptimizer):
             eval_data
         )
         
-        # Create new SystemPrompt with incremented version
-        new_version = current_prompt.version + 1
+        # Find the next available version number
+        latest_version = await sync_to_async(
+            lambda: SystemPrompt.objects.aggregate(
+                max_version=models.Max('version')
+            )['max_version'] or 0
+        )()
+        new_version = latest_version + 1
         
         # Create new prompt
         new_prompt = await sync_to_async(SystemPrompt.objects.create)(
