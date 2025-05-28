@@ -431,13 +431,11 @@ class OptimizationEndpointsTest(APITestCase):
         """Test triggering prompt optimization cycle"""
         url = reverse('trigger-optimization')
         
-        with patch('app.services.prompt_rewriter.PPOPromptRewriter') as mock_rewriter:
-            mock_rewriter.return_value = AsyncMock()
-            
-            response = self.client.post(url, {
-                "optimization_mode": "conservative",
-                "max_iterations": 3
-            })
+        # The current implementation is a mock that returns a predefined response
+        response = self.client.post(url, {
+            "type": "conservative",
+            "target_metrics": ["f1_score", "perplexity"]
+        })
         
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
         self.assertIn('optimization_id', response.data)

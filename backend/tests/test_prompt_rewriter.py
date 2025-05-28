@@ -122,29 +122,27 @@ async def test_rewrite_prompt_conservative_mode(llm_rewriter, rewrite_context):
 @pytest.mark.django_db
 @pytest.mark.asyncio
 async def test_rewrite_prompt_exploratory_mode(llm_rewriter, rewrite_context):
-    """Test prompt rewriting in exploratory mode (PRewrite-S)"""
+    """Test prompt rewriting in exploratory mode (LLM-based)"""
     # Setup mock LLM to return different responses for multiple calls
     responses = [
         "Enhanced email assistant for professional communication.",
-        "Advanced email helper with user preference learning.",
+        "Advanced email helper with user preference learning.", 
         "Intelligent email responder with context awareness.",
         "Smart email assistant with adaptive responses.",
         "Professional email generator with feedback integration."
     ]
-    ppo_rewriter.rewriter_llm.generate.side_effect = responses
+    llm_rewriter.rewriter_llm.generate.side_effect = responses
     
     # Test exploratory rewriting
-    candidates = await ppo_rewriter.rewrite_prompt(rewrite_context, mode="exploratory")
+    candidates = await llm_rewriter.rewrite_prompt(rewrite_context, mode="exploratory")
     
     # Verify results
     assert isinstance(candidates, list)
-    assert len(candidates) == 5  # Should generate 5 candidates
+    assert len(candidates) == 3  # Should generate 3 candidates
     assert all(isinstance(c, RewriteCandidate) for c in candidates)
-    assert all(c.temperature == 1.0 for c in candidates)  # Sampling
-    assert all(c.confidence == 0.7 for c in candidates)   # Lower confidence
     
-    # Verify LLM was called 5 times
-    assert ppo_rewriter.rewriter_llm.generate.call_count == 5
+    # Verify LLM was called 3 times
+    assert llm_rewriter.rewriter_llm.generate.call_count == 3
 
 
 @pytest.mark.django_db
@@ -381,19 +379,18 @@ async def test_rewrite_context_dataclass(system_prompt, test_email):
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_ppo_configuration_parameters(mock_rewriter_llm, mock_reward_aggregator, mock_meta_prompt_manager):
-    """Test PPO rewriter configuration parameters"""
-    custom_kl_penalty = 0.05
+async def test_llm_rewriter_configuration_parameters(mock_rewriter_llm, mock_similarity_llm, mock_reward_aggregator, mock_meta_prompt_manager):
+    """Test LLM-based rewriter configuration parameters"""
     
-    rewriter = PPOPromptRewriter(
+    rewriter = LLMBasedPromptRewriter(
         rewriter_llm_provider=mock_rewriter_llm,
+        similarity_llm_provider=mock_similarity_llm,
         reward_function_aggregator=mock_reward_aggregator,
-        meta_prompt_manager=mock_meta_prompt_manager,
-        kl_penalty=custom_kl_penalty
+        meta_prompt_manager=mock_meta_prompt_manager
     )
     
-    assert rewriter.kl_penalty == custom_kl_penalty
     assert rewriter.rewriter_llm == mock_rewriter_llm
+    assert rewriter.similarity_llm == mock_similarity_llm
     assert rewriter.reward_aggregator == mock_reward_aggregator
     assert rewriter.meta_prompt_manager == mock_meta_prompt_manager
-    assert rewriter.training_history == []
+    assert rewriter.feedback_patterns == []

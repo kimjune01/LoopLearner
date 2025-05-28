@@ -93,6 +93,7 @@ def sample_optimization_runs():
 class TestDashboardOverviewView:
     
     @pytest.mark.asyncio
+    @pytest.mark.django_db 
     async def test_get_dashboard_overview_success(self, async_client, mock_optimization_status, sample_prompts):
         with patch('app.api.dashboard_controller.get_optimization_status', return_value=mock_optimization_status):
             with patch('app.api.dashboard_controller.SystemPrompt.objects.filter') as mock_filter:
@@ -128,12 +129,13 @@ class TestDashboardOverviewView:
                         assert system_status['recent_optimizations'] == 3
 
     @pytest.mark.asyncio
+    @pytest.mark.django_db
     async def test_get_performance_metrics(self, async_client, sample_prompts):
         view = DashboardOverviewView()
         
         with patch('app.api.dashboard_controller.SystemPrompt.objects.filter') as mock_filter:
             # Mock queryset with async iteration
-            async def mock_aiter():
+            async def mock_aiter(self):
                 for prompt in sample_prompts:
                     yield prompt
             
@@ -158,7 +160,7 @@ class TestDashboardOverviewView:
             mock_queryset.acount = AsyncMock(return_value=len(sample_feedback))
             
             # Mock async iteration over feedback
-            async def mock_aiter():
+            async def mock_aiter(self):
                 for feedback in sample_feedback:
                     yield feedback
             
@@ -194,7 +196,7 @@ class TestDashboardOverviewView:
             mock_queryset.order_by.return_value = mock_queryset
             
             # Mock async iteration
-            async def mock_aiter():
+            async def mock_aiter(self):
                 for run in sample_optimization_runs:
                     yield run
             
@@ -224,7 +226,7 @@ class TestDashboardOverviewView:
             mock_queryset.select_related.return_value = mock_queryset
             
             # Mock async iteration
-            async def mock_aiter():
+            async def mock_aiter(self):
                 for feedback in sample_feedback:
                     yield feedback
             
