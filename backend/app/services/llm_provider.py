@@ -4,6 +4,7 @@ from core.models import Email, Draft, DraftReason, SystemPrompt, UserPreference
 import openai
 import json
 import re
+from asgiref.sync import sync_to_async
 
 
 class LLMProvider(ABC):
@@ -134,7 +135,7 @@ Please generate 2 draft responses to this email.
             drafts = []
             for draft_data in data.get("drafts", []):
                 # Create draft
-                draft = Draft.objects.create(
+                draft = await sync_to_async(Draft.objects.create)(
                     email=email,
                     content=draft_data["content"],
                     system_prompt=system_prompt
@@ -142,11 +143,11 @@ Please generate 2 draft responses to this email.
                 
                 # Create and associate reasons
                 for reason_data in draft_data.get("reasons", []):
-                    reason = DraftReason.objects.create(
+                    reason = await sync_to_async(DraftReason.objects.create)(
                         text=reason_data["text"],
                         confidence=reason_data.get("confidence", 0.5)
                     )
-                    draft.reasons.add(reason)
+                    await sync_to_async(draft.reasons.add)(reason)
                 
                 drafts.append(draft)
             

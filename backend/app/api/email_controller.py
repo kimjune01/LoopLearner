@@ -1,49 +1,61 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from typing import List
-from ..models.email import EmailMessage, EmailDraft, UserFeedback
-from ..services.email_generator import EmailGenerator
-from ..services.llm_provider import LLMProvider
+import requests
+import os
 
 router = APIRouter(prefix="/emails", tags=["emails"])
 
-
-# TODO: Add dependency injection for services
-async def get_email_generator() -> EmailGenerator:
-    raise NotImplementedError("Email generator dependency not configured")
+# Django API base URL
+DJANGO_API_BASE = os.getenv('DJANGO_API_BASE', 'http://localhost:8000/api')
 
 
-async def get_llm_provider() -> LLMProvider:
-    raise NotImplementedError("LLM provider dependency not configured")
-
-
-@router.post("/generate", response_model=EmailMessage)
-async def generate_fake_email(
-    scenario_type: str = "random",
-    email_generator: EmailGenerator = Depends(get_email_generator)
-) -> EmailMessage:
+@router.post("/generate")
+async def generate_fake_email(scenario_type: str = "random"):
     """Generate a fake email for testing"""
     try:
-        email = await email_generator.generate_synthetic_email(scenario_type)
-        return email
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        response = requests.post(
+            f"{DJANGO_API_BASE}/emails/generate/",
+            json={"scenario_type": scenario_type}
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Django API error: {str(e)}")
 
 
-@router.post("/{email_id}/drafts", response_model=List[EmailDraft])
-async def generate_drafts(
-    email_id: str,
-    llm_provider: LLMProvider = Depends(get_llm_provider)
-) -> List[EmailDraft]:
+@router.post("/{email_id}/drafts")
+async def generate_drafts(email_id: int):
     """Generate draft responses for an email"""
-    # TODO: Implement draft generation
-    raise HTTPException(status_code=501, detail="Draft generation not implemented")
+    try:
+        response = requests.post(
+            f"{DJANGO_API_BASE}/emails/{email_id}/drafts/generate/"
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Django API error: {str(e)}")
 
 
 @router.post("/{email_id}/feedback")
-async def submit_feedback(
-    email_id: str,
-    feedback: UserFeedback
-) -> dict:
+async def submit_feedback(email_id: int, feedback_data: dict):
     """Submit user feedback for an email/draft"""
-    # TODO: Implement feedback processing
-    raise HTTPException(status_code=501, detail="Feedback processing not implemented")
+    try:
+        response = requests.post(
+            f"{DJANGO_API_BASE}/emails/{email_id}/feedback/",
+            json=feedback_data
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Django API error: {str(e)}")
+
+
+@router.get("/")
+async def list_emails():
+    """List all emails"""
+    try:
+        response = requests.get(f"{DJANGO_API_BASE}/emails/")
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Django API error: {str(e)}")

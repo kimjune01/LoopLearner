@@ -3,6 +3,7 @@ from typing import List
 from core.models import Email
 import random
 from django.utils import timezone
+from asgiref.sync import sync_to_async
 
 
 class EmailGenerator(ABC):
@@ -96,7 +97,7 @@ class SyntheticEmailGenerator(EmailGenerator):
             
         template = self.TEMPLATES[scenario_type]
         
-        email = Email.objects.create(
+        email = await sync_to_async(Email.objects.create)(
             subject=random.choice(template['subjects']),
             body=random.choice(template['bodies']),
             sender=random.choice(template['senders']),

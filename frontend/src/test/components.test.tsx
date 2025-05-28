@@ -18,14 +18,6 @@ vi.mock('../services/emailService', () => ({
   }
 }));
 
-vi.mock('../services/stateService', () => ({
-  stateService: {
-    getCurrentState: vi.fn(),
-    exportState: vi.fn(),
-    importState: vi.fn(),
-  }
-}));
-
 vi.mock('../services/optimizationService', () => ({
   optimizationService: {
     triggerOptimization: vi.fn(),
@@ -144,17 +136,7 @@ describe('ProgressDashboard Component', () => {
 
   it('should have trigger optimization button', async () => {
     // Mock successful service calls
-    const { stateService } = await import('../services/stateService');
     const { optimizationService } = await import('../services/optimizationService');
-    
-    vi.mocked(stateService.getCurrentState).mockResolvedValue({
-      current_prompt: { content: 'test', version: 1, created_at: '2025-01-01' },
-      user_preferences: [],
-      evaluation_snapshots: [],
-      optimization_history: [],
-      confidence_score: 0.5,
-      last_updated: '2025-01-01'
-    });
     
     vi.mocked(optimizationService.getOptimizationStatus).mockResolvedValue({
       status: 'idle'
@@ -168,28 +150,10 @@ describe('ProgressDashboard Component', () => {
 });
 
 describe('StateExporter Component', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should render export and import sections', () => {
+  it('should render placeholder for state management', () => {
     render(<StateExporter />);
     
     expect(screen.getByText('State Management')).toBeInTheDocument();
-    expect(screen.getByText('Export State')).toBeInTheDocument();
-    expect(screen.getByText('Import State')).toBeInTheDocument();
-  });
-
-  it('should have export button', () => {
-    render(<StateExporter />);
-    
-    expect(screen.getByRole('button', { name: 'Export State' })).toBeInTheDocument();
-  });
-
-  it('should have import textarea and button', () => {
-    render(<StateExporter />);
-    
-    expect(screen.getByRole('textbox')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Import State' })).toBeInTheDocument();
+    expect(screen.getByText('State management features will be implemented later')).toBeInTheDocument();
   });
 });

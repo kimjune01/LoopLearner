@@ -1,8 +1,12 @@
 import pytest
+from django.test import TestCase
+from django.db import transaction
+from asgiref.sync import sync_to_async
 from app.services.email_generator import SyntheticEmailGenerator
-from app.models.email import EmailMessage
+from core.models import Email
 
 
+@pytest.mark.django_db
 @pytest.mark.asyncio
 class TestEmailGenerator:
     """Test cases for email generator interface"""
@@ -11,36 +15,43 @@ class TestEmailGenerator:
         self.generator = SyntheticEmailGenerator()
     
     async def test_generate_synthetic_email_interface(self):
-        """Test that generate_synthetic_email method exists"""
-        with pytest.raises(NotImplementedError):
-            await self.generator.generate_synthetic_email()
+        """Test that generate_synthetic_email method exists and works"""
+        result = await self.generator.generate_synthetic_email("professional")
+        assert isinstance(result, Email)
+        assert result.id is not None
+        assert result.subject is not None
+        assert result.body is not None
+        assert result.sender is not None
+        assert result.scenario_type == "professional"
+        assert result.is_synthetic is True
     
     async def test_generate_batch_emails_interface(self):
-        """Test that generate_batch_emails method exists"""
-        with pytest.raises(NotImplementedError):
-            await self.generator.generate_batch_emails(5, ["professional", "casual"])
+        """Test that generate_batch_emails method exists and works"""
+        count = 3
+        result = await self.generator.generate_batch_emails(count, ["professional", "casual"])
+        assert isinstance(result, list)
+        assert len(result) == count
+        assert all(isinstance(email, Email) for email in result)
     
     async def test_generate_synthetic_email_returns_email_message(self):
-        """Test that when implemented, generates valid EmailMessage"""
-        # This test will fail until implementation is complete
-        try:
-            result = await self.generator.generate_synthetic_email("professional")
-            assert isinstance(result, EmailMessage)
-            assert result.id is not None
-            assert result.subject is not None
-            assert result.body is not None
-            assert result.sender is not None
-        except NotImplementedError:
-            pytest.fail("generate_synthetic_email not implemented - this test should pass when implemented")
+        """Test that generates valid Email model instance"""
+        result = await self.generator.generate_synthetic_email("professional")
+        assert isinstance(result, Email)
+        assert result.id is not None
+        assert result.subject is not None
+        assert result.body is not None
+        assert result.sender is not None
+        assert result.scenario_type == "professional"
+        assert result.is_synthetic is True
     
     async def test_generate_batch_emails_returns_list(self):
-        """Test that when implemented, batch generation returns correct count"""
-        # This test will fail until implementation is complete
-        try:
-            count = 3
-            result = await self.generator.generate_batch_emails(count, ["test"])
-            assert isinstance(result, list)
-            assert len(result) == count
-            assert all(isinstance(email, EmailMessage) for email in result)
-        except NotImplementedError:
-            pytest.fail("generate_batch_emails not implemented - this test should pass when implemented")
+        """Test that batch generation returns correct count"""
+        count = 3
+        result = await self.generator.generate_batch_emails(count, ["professional"])
+        assert isinstance(result, list)
+        assert len(result) == count
+        assert all(isinstance(email, Email) for email in result)
+        
+        # Verify all emails are saved to database
+        total_emails = await sync_to_async(Email.objects.count)()
+        assert total_emails >= count

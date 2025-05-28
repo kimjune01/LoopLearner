@@ -1,26 +1,26 @@
-from fastapi import APIRouter, HTTPException, Depends
-from ..services.optimizer import PromptOptimizer
-from ..models.state import SystemPrompt
+from fastapi import APIRouter, HTTPException
+import requests
+import os
 
 router = APIRouter(prefix="/optimization", tags=["optimization"])
 
-
-# TODO: Add dependency injection for optimizer
-async def get_optimizer() -> PromptOptimizer:
-    raise NotImplementedError("Optimizer dependency not configured")
+# Django API base URL
+DJANGO_API_BASE = os.getenv('DJANGO_API_BASE', 'http://localhost:8000/api')
 
 
 @router.post("/trigger")
-async def trigger_optimization(
-    optimizer: PromptOptimizer = Depends(get_optimizer)
-) -> dict:
+async def trigger_optimization() -> dict:
     """Trigger prompt optimization cycle"""
-    # TODO: Implement optimization trigger
-    raise HTTPException(status_code=501, detail="Optimization not implemented")
+    # TODO: Implement optimization trigger through Django API
+    raise HTTPException(status_code=501, detail="Optimization trigger not implemented yet")
 
 
 @router.get("/status")
 async def get_optimization_status() -> dict:
     """Get current optimization status"""
-    # TODO: Implement status check
-    return {"status": "not_implemented"}
+    try:
+        response = requests.get(f"{DJANGO_API_BASE}/optimization/status/")
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Django API error: {str(e)}")

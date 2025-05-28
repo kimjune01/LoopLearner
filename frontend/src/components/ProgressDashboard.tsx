@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SystemState } from '../types/state';
 import { OptimizationStatus } from '../services/optimizationService';
-import { stateService } from '../services/stateService';
 import { optimizationService } from '../services/optimizationService';
 
 export const ProgressDashboard: React.FC = () => {
@@ -12,11 +11,8 @@ export const ProgressDashboard: React.FC = () => {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      const [state, optStatus] = await Promise.all([
-        stateService.getCurrentState(),
-        optimizationService.getOptimizationStatus()
-      ]);
-      setSystemState(state);
+      // TODO: Implement state loading when state service is added
+      const optStatus = await optimizationService.getOptimizationStatus();
       setOptimizationStatus(optStatus);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
