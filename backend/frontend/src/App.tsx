@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Dashboard from './components/Dashboard'
+import DemoWorkflow from './components/DemoWorkflow'
 
 interface Email {
   id: number
@@ -17,7 +18,7 @@ interface Draft {
 }
 
 function App() {
-  const [currentView, setCurrentView] = useState<'demo' | 'dashboard'>('demo')
+  const [currentView, setCurrentView] = useState<'demo' | 'dashboard' | 'workflow'>('demo')
   const [currentEmail, setCurrentEmail] = useState<Email | null>(null)
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [selectedDraft, setSelectedDraft] = useState<Draft | null>(null)
@@ -159,6 +160,16 @@ function App() {
               </button>
               <button 
                 className={`px-6 py-3 rounded-lg font-medium transition-all ${
+                  currentView === 'workflow' 
+                    ? 'bg-white text-blue-600 shadow-lg' 
+                    : 'bg-white/20 text-white border-2 border-white/30 hover:bg-white/30'
+                }`}
+                onClick={() => setCurrentView('workflow')}
+              >
+                Workflow
+              </button>
+              <button 
+                className={`px-6 py-3 rounded-lg font-medium transition-all ${
                   currentView === 'dashboard' 
                     ? 'bg-white text-blue-600 shadow-lg' 
                     : 'bg-white/20 text-white border-2 border-white/30 hover:bg-white/30'
@@ -175,6 +186,8 @@ function App() {
       <main className="flex-1">
         {currentView === 'dashboard' ? (
           <Dashboard />
+        ) : currentView === 'workflow' ? (
+          <DemoWorkflow />
         ) : (
           <div className="max-w-5xl mx-auto px-6 py-8">
             {error && (

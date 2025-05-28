@@ -22,6 +22,12 @@ from .dashboard_controller import (
     LearningMetricsView,
     dashboard_summary,
 )
+from .demo_controller import (
+    DemoWorkflowView,
+    DemoStatusView,
+    reset_demo_data,
+    demo_health_check,
+)
 
 urlpatterns = [
     # Email endpoints
@@ -51,6 +57,12 @@ urlpatterns = [
     path('dashboard/overview/', DashboardOverviewView.as_view(), name='dashboard-overview'),
     path('dashboard/metrics/', LearningMetricsView.as_view(), name='learning-metrics'),
     path('dashboard/summary/', dashboard_summary, name='dashboard-summary'),
+    
+    # Demo workflow endpoints
+    path('demo/workflow/', DemoWorkflowView.as_view(), name='demo-workflow'),
+    path('demo/status/', DemoStatusView.as_view(), name='demo-status'),
+    path('demo/reset/', reset_demo_data, name='demo-reset'),
+    path('demo/health/', demo_health_check, name='demo-health'),
     
     # Health and metrics endpoints
     path('health/', HealthCheckView.as_view(), name='health-check'),
