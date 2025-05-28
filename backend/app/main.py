@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api import email_controller, state_controller, optimization_controller
+from .api import email_controller, optimization_controller
 
 app = FastAPI(title="Loop Learner Backend", version="0.1.0")
 
@@ -15,7 +15,6 @@ app.add_middleware(
 
 # Include API routers
 app.include_router(email_controller.router)
-app.include_router(state_controller.router)
 app.include_router(optimization_controller.router)
 
 @app.get("/")
