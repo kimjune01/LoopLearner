@@ -13,7 +13,7 @@ from app.services.unified_llm_provider import LLMProviderFactory, EmailDraft
 from app.services.email_generator import SyntheticEmailGenerator
 from app.services.human_feedback_integrator import HumanFeedbackIntegrator
 from app.services.dual_llm_coordinator import DualLLMCoordinator
-from app.services.prompt_rewriter import PPOPromptRewriter
+from app.services.prompt_rewriter import LLMBasedPromptRewriter
 from app.services.reward_aggregator import RewardFunctionAggregator
 
 logger = logging.getLogger(__name__)

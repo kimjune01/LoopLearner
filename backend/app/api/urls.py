@@ -17,6 +17,11 @@ from .optimization_status_controller import (
     OptimizationHistoryView,
     optimization_health_check,
 )
+from .dashboard_controller import (
+    DashboardOverviewView,
+    LearningMetricsView,
+    dashboard_summary,
+)
 
 urlpatterns = [
     # Email endpoints
@@ -41,6 +46,11 @@ urlpatterns = [
     path('optimization/scheduler/', OptimizationStatusView.as_view(), name='optimization-scheduler'),
     path('optimization/history/', OptimizationHistoryView.as_view(), name='optimization-history'),
     path('optimization/health/', optimization_health_check, name='optimization-health'),
+    
+    # Dashboard and analytics endpoints
+    path('dashboard/overview/', DashboardOverviewView.as_view(), name='dashboard-overview'),
+    path('dashboard/metrics/', LearningMetricsView.as_view(), name='learning-metrics'),
+    path('dashboard/summary/', dashboard_summary, name='dashboard-summary'),
     
     # Health and metrics endpoints
     path('health/', HealthCheckView.as_view(), name='health-check'),

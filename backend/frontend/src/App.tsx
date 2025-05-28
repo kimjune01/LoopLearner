@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import './App.css'
+import Dashboard from './components/Dashboard'
 
 interface Email {
   id: number
@@ -17,6 +17,7 @@ interface Draft {
 }
 
 function App() {
+  const [currentView, setCurrentView] = useState<'demo' | 'dashboard'>('demo')
   const [currentEmail, setCurrentEmail] = useState<Email | null>(null)
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [selectedDraft, setSelectedDraft] = useState<Draft | null>(null)
@@ -44,7 +45,6 @@ function App() {
       }
       
       const data = await response.json()
-      // API returns the email data directly, not nested under 'email'
       setCurrentEmail({
         id: data.email_id,
         subject: data.subject,
@@ -140,109 +140,155 @@ function App() {
   }, [])
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>Loop Learner</h1>
-        <p>Human-in-the-Loop Email Response Optimization</p>
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <header className="bg-gradient-to-r from-blue-600 to-purple-700 text-white">
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <div className="flex flex-col items-center text-center">
+            <h1 className="text-4xl font-bold mb-2">Loop Learner</h1>
+            <p className="text-blue-100 text-lg mb-6">Human-in-the-Loop Email Response Optimization</p>
+            <nav className="flex gap-4">
+              <button 
+                className={`px-6 py-3 rounded-lg font-medium transition-all ${
+                  currentView === 'demo' 
+                    ? 'bg-white text-blue-600 shadow-lg' 
+                    : 'bg-white/20 text-white border-2 border-white/30 hover:bg-white/30'
+                }`}
+                onClick={() => setCurrentView('demo')}
+              >
+                Demo
+              </button>
+              <button 
+                className={`px-6 py-3 rounded-lg font-medium transition-all ${
+                  currentView === 'dashboard' 
+                    ? 'bg-white text-blue-600 shadow-lg' 
+                    : 'bg-white/20 text-white border-2 border-white/30 hover:bg-white/30'
+                }`}
+                onClick={() => setCurrentView('dashboard')}
+              >
+                Dashboard
+              </button>
+            </nav>
+          </div>
+        </div>
       </header>
 
-      <main className="app-main">
-        {error && (
-          <div className="error-message">
-            <strong>Error:</strong> {error}
-          </div>
-        )}
-
-        <section className="email-section">
-          <div className="section-header">
-            <h2>Incoming Email</h2>
-            <button onClick={generateSyntheticEmail} disabled={loading}>
-              {loading ? 'Generating...' : 'Generate New Email'}
-            </button>
-          </div>
-          
-          {currentEmail && (
-            <div className="email-card">
-              <div className="email-meta">
-                <strong>From:</strong> {currentEmail.sender} | <strong>Type:</strong> {currentEmail.scenario_type}
+      <main className="flex-1">
+        {currentView === 'dashboard' ? (
+          <Dashboard />
+        ) : (
+          <div className="max-w-5xl mx-auto px-6 py-8">
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <div className="text-red-800">
+                  <strong>Error:</strong> {error}
+                </div>
               </div>
-              <h3>{currentEmail.subject}</h3>
-              <p>{currentEmail.body}</p>
-            </div>
-          )}
-        </section>
+            )}
 
-        <section className="drafts-section">
-          <div className="section-header">
-            <h2>Response Drafts</h2>
-            <button 
-              onClick={generateDrafts} 
-              disabled={loading || !currentEmail}
-            >
-              {loading ? 'Generating...' : 'Generate Drafts'}
-            </button>
-          </div>
-
-          {drafts.length > 0 && (
-            <div className="drafts-container">
-              <div className="draft-selector">
-                {drafts.map((draft, index) => (
-                  <button
-                    key={draft.id}
-                    className={`draft-tab ${selectedDraft?.id === draft.id ? 'active' : ''}`}
-                    onClick={() => setSelectedDraft(draft)}
-                  >
-                    Draft {index + 1}
-                  </button>
-                ))}
+            <section className="mb-8">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Incoming Email</h2>
+                <button 
+                  onClick={generateSyntheticEmail} 
+                  disabled={loading}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  {loading ? 'Generating...' : 'Generate New Email'}
+                </button>
               </div>
-
-              {selectedDraft && (
-                <div className="draft-content">
-                  <div className="draft-text">
-                    {selectedDraft.content}
+              
+              {currentEmail && (
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                  <div className="flex gap-4 text-sm text-gray-600 mb-4">
+                    <span><strong>From:</strong> {currentEmail.sender}</span>
+                    <span><strong>Type:</strong> {currentEmail.scenario_type}</span>
                   </div>
-                  
-                  <div className="feedback-actions">
-                    <button 
-                      className="feedback-btn accept"
-                      onClick={() => submitFeedback('accept')}
-                      disabled={loading}
-                    >
-                      ✓ Accept
-                    </button>
-                    <button 
-                      className="feedback-btn reject"
-                      onClick={() => submitFeedback('reject')}
-                      disabled={loading}
-                    >
-                      ✗ Reject
-                    </button>
-                    <button 
-                      className="feedback-btn edit"
-                      onClick={() => {
-                        const edited = prompt('Edit the draft:', selectedDraft.content)
-                        if (edited && edited !== selectedDraft.content) {
-                          submitFeedback('edit', edited)
-                        }
-                      }}
-                      disabled={loading}
-                    >
-                      ✎ Edit
-                    </button>
-                    <button 
-                      className="feedback-btn ignore"
-                      onClick={() => submitFeedback('ignore')}
-                      disabled={loading}
-                    >
-                      Skip
-                    </button>
-                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-3">{currentEmail.subject}</h3>
+                  <p className="text-gray-700 leading-relaxed">{currentEmail.body}</p>
                 </div>
               )}
-            </div>
-          )}
-        </section>
+            </section>
+
+            <section>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Response Drafts</h2>
+                <button 
+                  onClick={generateDrafts} 
+                  disabled={loading || !currentEmail}
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  {loading ? 'Generating...' : 'Generate Drafts'}
+                </button>
+              </div>
+
+              {drafts.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="flex border-b border-gray-200">
+                    {drafts.map((draft, index) => (
+                      <button
+                        key={draft.id}
+                        className={`flex-1 px-6 py-4 font-medium transition-colors ${
+                          selectedDraft?.id === draft.id
+                            ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600'
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                        }`}
+                        onClick={() => setSelectedDraft(draft)}
+                      >
+                        Draft {index + 1}
+                      </button>
+                    ))}
+                  </div>
+
+                  {selectedDraft && (
+                    <div className="p-6">
+                      <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                        <p className="text-gray-800 leading-relaxed">
+                          {selectedDraft.content}
+                        </p>
+                      </div>
+                      
+                      <div className="flex gap-3">
+                        <button 
+                          className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                          onClick={() => submitFeedback('accept')}
+                          disabled={loading}
+                        >
+                          ✓ Accept
+                        </button>
+                        <button 
+                          className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                          onClick={() => submitFeedback('reject')}
+                          disabled={loading}
+                        >
+                          ✗ Reject
+                        </button>
+                        <button 
+                          className="bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-400 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                          onClick={() => {
+                            const edited = prompt('Edit the draft:', selectedDraft.content)
+                            if (edited && edited !== selectedDraft.content) {
+                              submitFeedback('edit', edited)
+                            }
+                          }}
+                          disabled={loading}
+                        >
+                          ✎ Edit
+                        </button>
+                        <button 
+                          className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                          onClick={() => submitFeedback('ignore')}
+                          disabled={loading}
+                        >
+                          Skip
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
       </main>
     </div>
   )
