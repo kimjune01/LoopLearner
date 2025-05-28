@@ -342,13 +342,19 @@ async def test_scenario_specific_weights(mock_llm_provider):
     # Test professional scenario uses correct weights
     context = {'email_scenario': 'professional'}
     
-    # Mock all reward functions to return 0.5
-    for reward_func in aggregator.reward_functions.values():
-        reward_func.compute_reward = AsyncMock(return_value=0.5)
+    # Use real reward function implementations instead of mocking
+    # This tests the actual business logic and weighted aggregation
     
-    # Create mock objects for the test
+    # Create realistic context for real reward functions
+    context.update({
+        'expected_output': 'professional email response',
+        'actual_output': 'professional email response',  # Perfect match for testing
+        'user_feedback': type('MockFeedback', (), {'action': 'accept'})(),
+        'expected_length': 4  # 4 words in actual output
+    })
+    
     mock_prompt = type('MockPrompt', (), {'content': 'test'})()
-    mock_feedback = type('MockFeedback', (), {'action': 'accept'})()
+    mock_feedback = context['user_feedback']
     
     reward = await aggregator.compute_reward(
         mock_prompt,
