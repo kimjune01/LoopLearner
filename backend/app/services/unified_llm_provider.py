@@ -66,6 +66,15 @@ class BaseLLMProvider(ABC):
     async def health_check(self) -> Dict[str, Any]:
         """Check provider health and availability"""
         pass
+    
+    @abstractmethod
+    async def get_log_probabilities(
+        self,
+        text: str,
+        context: Optional[str] = None
+    ) -> List[float]:
+        """Get log probabilities for each token in the text"""
+        pass
 
 
 class OllamaProvider(BaseLLMProvider):
@@ -157,6 +166,85 @@ class OllamaProvider(BaseLLMProvider):
                 "model": self.config.model,
                 "error": str(e)
             }
+    
+    async def get_log_probabilities(
+        self,
+        text: str,
+        context: Optional[str] = None
+    ) -> List[float]:
+        """Get log probabilities for each token in the text"""
+        try:
+            # Ollama doesn't directly support logprobs, so use LLM-based estimation
+            if context:
+                eval_prompt = f"""
+Given this context: "{context}"
+
+Rate the likelihood of each word in this continuation on a scale where:
+- Very likely/common words: 0.9-1.0
+- Moderately likely words: 0.6-0.8  
+- Unlikely/uncommon words: 0.3-0.5
+- Very unlikely words: 0.1-0.2
+
+Text to evaluate: "{text}"
+
+Provide likelihood scores for each word as a JSON list: [0.8, 0.6, 0.9, ...]
+"""
+            else:
+                eval_prompt = f"""
+Rate the likelihood of each word in this text on a scale where:
+- Very common words (the, and, is): 0.9-1.0
+- Common words: 0.6-0.8
+- Uncommon words: 0.3-0.5  
+- Very rare words: 0.1-0.2
+
+Text: "{text}"
+
+Provide likelihood scores for each word as a JSON list: [0.8, 0.6, 0.9, ...]
+"""
+            
+            response = await self.generate(eval_prompt, temperature=0.1, max_tokens=200)
+            
+            # Try to extract JSON array from response
+            import json
+            import re
+            
+            json_match = re.search(r'\[[\d\.\,\s]+\]', response)
+            if json_match:
+                likelihood_scores = json.loads(json_match.group())
+                # Convert likelihood scores to log probabilities
+                import math
+                log_probs = [math.log(max(score, 0.001)) for score in likelihood_scores]
+                return log_probs
+            else:
+                return self._estimate_log_probabilities(text)
+                
+        except Exception as e:
+            return self._estimate_log_probabilities(text)
+    
+    def _estimate_log_probabilities(self, text: str) -> List[float]:
+        """Estimate log probabilities based on text characteristics"""
+        import re
+        import math
+        
+        words = text.split()
+        log_probs = []
+        
+        for word in words:
+            if len(word) <= 3:
+                likelihood = 0.8
+            elif word.lower() in ['the', 'and', 'to', 'of', 'a', 'in', 'is', 'it', 'you', 'that', 'he', 'was', 'for', 'on', 'are', 'as', 'with', 'his', 'they', 'at']:
+                likelihood = 0.9
+            elif re.match(r'^[A-Z][a-z]+$', word):
+                likelihood = 0.3
+            elif word.isdigit():
+                likelihood = 0.4
+            else:
+                likelihood = 0.6
+            
+            log_prob = math.log(max(likelihood, 0.001))
+            log_probs.append(log_prob)
+        
+        return log_probs
     
     def _build_draft_prompt(self, email_content: str, user_preferences: List[Dict] = None, 
                           constraints: Dict = None, draft_num: int = 1) -> str:
@@ -333,6 +421,67 @@ class OpenAIProvider(BaseLLMProvider):
                 "model": self.config.model,
                 "error": str(e)
             }
+    
+    async def get_log_probabilities(
+        self,
+        text: str,
+        context: Optional[str] = None
+    ) -> List[float]:
+        """Get log probabilities for each token in the text using echo technique"""
+        try:
+            # Use the "echo" technique: provide the text as assistant message and ask model to echo it
+            messages = []
+            if context:
+                messages.append({"role": "user", "content": context})
+                messages.append({"role": "assistant", "content": text})
+                messages.append({"role": "user", "content": "Please repeat exactly what you just said."})
+            else:
+                messages.append({"role": "user", "content": f"Please repeat this exactly: {text}"})
+            
+            response = await self.client.chat.completions.create(
+                model=self.config.model,
+                messages=messages,
+                temperature=0.0,  # Deterministic for probability calculation
+                max_tokens=len(text.split()) + 20,  # Enough tokens to echo the text
+                logprobs=True,
+                top_logprobs=1
+            )
+            
+            # Extract log probabilities from response
+            if response.choices[0].logprobs and response.choices[0].logprobs.content:
+                log_probs = []
+                for token_data in response.choices[0].logprobs.content:
+                    if token_data.logprob is not None:
+                        log_probs.append(token_data.logprob)
+                return log_probs
+            else:
+                return self._estimate_log_probabilities(text)
+                
+        except Exception as e:
+            return self._estimate_log_probabilities(text)
+    
+    def _estimate_log_probabilities(self, text: str) -> List[float]:
+        """Estimate log probabilities based on text characteristics"""
+        import re
+        
+        words = text.split()
+        log_probs = []
+        
+        for word in words:
+            if len(word) <= 3:
+                log_prob = -2.0
+            elif word.lower() in ['the', 'and', 'to', 'of', 'a', 'in', 'is', 'it', 'you', 'that', 'he', 'was', 'for', 'on', 'are', 'as', 'with', 'his', 'they', 'at']:
+                log_prob = -1.5
+            elif re.match(r'^[A-Z][a-z]+$', word):
+                log_prob = -4.0
+            elif word.isdigit():
+                log_prob = -3.5
+            else:
+                log_prob = -3.0
+            
+            log_probs.append(log_prob)
+        
+        return log_probs
 
 
 class MockProvider(BaseLLMProvider):
@@ -354,6 +503,33 @@ class MockProvider(BaseLLMProvider):
     
     async def health_check(self) -> Dict[str, Any]:
         return {"status": "healthy", "provider": "mock", "model": "mock-model"}
+    
+    async def get_log_probabilities(
+        self,
+        text: str,
+        context: Optional[str] = None
+    ) -> List[float]:
+        """Mock log probabilities for testing"""
+        import re
+        import math
+        
+        words = text.split()
+        log_probs = []
+        
+        for word in words:
+            if len(word) <= 3:
+                likelihood = 0.8
+            elif word.lower() in ['the', 'and', 'to', 'of', 'a', 'in', 'is', 'it', 'you', 'that']:
+                likelihood = 0.9
+            elif re.match(r'^[A-Z][a-z]+$', word):
+                likelihood = 0.3
+            else:
+                likelihood = 0.6
+            
+            log_prob = math.log(max(likelihood, 0.001))
+            log_probs.append(log_prob)
+        
+        return log_probs
 
 
 class LLMProviderFactory:
