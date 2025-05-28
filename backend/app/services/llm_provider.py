@@ -134,20 +134,21 @@ Please generate 2 draft responses to this email.
             # Create Draft objects with reasons
             drafts = []
             for draft_data in data.get("drafts", []):
-                # Create draft
-                draft = await sync_to_async(Draft.objects.create)(
+                # Create draft using async ORM
+                draft = await Draft.objects.acreate(
                     email=email,
                     content=draft_data["content"],
                     system_prompt=system_prompt
                 )
                 
-                # Create and associate reasons
+                # Create reasons and associate them
                 for reason_data in draft_data.get("reasons", []):
-                    reason = await sync_to_async(DraftReason.objects.create)(
+                    reason = await DraftReason.objects.acreate(
                         text=reason_data["text"],
                         confidence=reason_data.get("confidence", 0.5)
                     )
-                    await sync_to_async(draft.reasons.add)(reason)
+                    # ManyToMany add operation - still needs sync_to_async
+                    await sync_to_async(draft.reasons.add, thread_sensitive=True)(reason)
                 
                 drafts.append(draft)
             
