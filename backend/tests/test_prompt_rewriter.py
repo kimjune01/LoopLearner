@@ -147,16 +147,16 @@ async def test_rewrite_prompt_exploratory_mode(llm_rewriter, rewrite_context):
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_rewrite_prompt_hybrid_mode(ppo_rewriter, rewrite_context):
+async def test_rewrite_prompt_hybrid_mode(llm_rewriter, rewrite_context):
     """Test prompt rewriting in hybrid mode"""
     # Setup mock responses
     conservative_response = "Conservative enhanced email assistant."
     exploratory_responses = [f"Exploratory assistant variant {i}" for i in range(1, 6)]
     
-    ppo_rewriter.rewriter_llm.generate.side_effect = [conservative_response] + exploratory_responses
+    llm_rewriter.rewriter_llm.generate.side_effect = [conservative_response] + exploratory_responses
     
     # Test hybrid rewriting
-    candidates = await ppo_rewriter.rewrite_prompt(rewrite_context, mode="hybrid")
+    candidates = await llm_rewriter.rewrite_prompt(rewrite_context, mode="hybrid")
     
     # Verify results
     assert isinstance(candidates, list)
@@ -174,7 +174,7 @@ async def test_rewrite_prompt_hybrid_mode(ppo_rewriter, rewrite_context):
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_select_best_candidate(ppo_rewriter):
+async def test_select_best_candidate(llm_rewriter):
     """Test selection of best candidate from list"""
     # Create test candidates
     candidates = [
@@ -184,12 +184,12 @@ async def test_select_best_candidate(ppo_rewriter):
     ]
     
     # Setup mock reward evaluations
-    ppo_rewriter.reward_aggregator.evaluate_candidate.side_effect = [0.6, 0.9, 0.5]
+    llm_rewriter.reward_aggregator.evaluate_candidate.side_effect = [0.6, 0.9, 0.5]
     
     evaluation_context = {"email_scenario": "professional"}
     
     # Test candidate selection
-    best_candidate = await ppo_rewriter.select_best_candidate(candidates, evaluation_context)
+    best_candidate = await llm_rewriter.select_best_candidate(candidates, evaluation_context)
     
     # Verify best candidate is selected
     assert best_candidate == candidates[1]  # Highest reward (0.9)
@@ -198,8 +198,8 @@ async def test_select_best_candidate(ppo_rewriter):
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_update_from_feedback(ppo_rewriter, system_prompt):
-    """Test updating PPO model from user feedback"""
+async def test_update_from_feedback(llm_rewriter, system_prompt):
+    """Test updating LLM-based rewriter from user feedback"""
     # Create test feedback
     test_feedback = type('MockFeedback', (), {
         'action': 'accept',
@@ -216,7 +216,7 @@ async def test_update_from_feedback(ppo_rewriter, system_prompt):
     rewritten_prompt = "Enhanced prompt for better email responses."
     
     # Test feedback processing
-    await ppo_rewriter.update_from_feedback(
+    await llm_rewriter.update_from_feedback(
         system_prompt,
         rewritten_prompt,
         test_feedback,
@@ -224,11 +224,11 @@ async def test_update_from_feedback(ppo_rewriter, system_prompt):
     )
     
     # Verify reward computation was called
-    ppo_rewriter.reward_aggregator.compute_reward.assert_called_once()
+    llm_rewriter.reward_aggregator.compute_reward.assert_called_once()
     
     # Verify training example was stored
-    assert len(ppo_rewriter.training_history) == 1
-    training_example = ppo_rewriter.training_history[0]
+    assert len(llm_rewriter.training_history) == 1
+    training_example = llm_rewriter.training_history[0]
     assert training_example['original_prompt'] == system_prompt.content
     assert training_example['rewritten_prompt'] == rewritten_prompt
     assert training_example['reward'] == 0.7  # Mock return value
@@ -236,10 +236,10 @@ async def test_update_from_feedback(ppo_rewriter, system_prompt):
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_batch_training_trigger(ppo_rewriter, system_prompt):
+async def test_batch_training_trigger(llm_rewriter, system_prompt):
     """Test that batch training triggers after enough examples"""
     # Mock the training step
-    ppo_rewriter._run_ppo_training_step = AsyncMock()
+    llm_rewriter._run_training_step = AsyncMock()
     
     # Add 9 training examples (below threshold)
     for i in range(9):
@@ -249,7 +249,7 @@ async def test_batch_training_trigger(ppo_rewriter, system_prompt):
             'created_at': '2024-01-01T00:00:00Z'
         })()
         
-        await ppo_rewriter.update_from_feedback(
+        await llm_rewriter.update_from_feedback(
             system_prompt,
             f"Rewritten prompt {i}",
             test_feedback,
@@ -257,8 +257,8 @@ async def test_batch_training_trigger(ppo_rewriter, system_prompt):
         )
     
     # Training should not have triggered yet
-    ppo_rewriter._run_ppo_training_step.assert_not_called()
-    assert len(ppo_rewriter.training_history) == 9
+    llm_rewriter._run_training_step.assert_not_called()
+    assert len(llm_rewriter.training_history) == 9
     
     # Add 10th example (triggers training)
     test_feedback = type('MockFeedback', (), {
@@ -267,7 +267,7 @@ async def test_batch_training_trigger(ppo_rewriter, system_prompt):
         'created_at': '2024-01-01T00:00:00Z'
     })()
     
-    await ppo_rewriter.update_from_feedback(
+    await llm_rewriter.update_from_feedback(
         system_prompt,
         "Final rewritten prompt",
         test_feedback,
@@ -275,26 +275,26 @@ async def test_batch_training_trigger(ppo_rewriter, system_prompt):
     )
     
     # Training should have triggered and history cleared
-    ppo_rewriter._run_ppo_training_step.assert_called_once()
-    assert len(ppo_rewriter.training_history) == 0
+    llm_rewriter._run_training_step.assert_called_once()
+    assert len(llm_rewriter.training_history) == 0
 
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_meta_prompt_integration(ppo_rewriter, rewrite_context):
+async def test_meta_prompt_integration(llm_rewriter, rewrite_context):
     """Test integration with meta-prompt manager"""
     # Setup mock meta-prompt
     expected_meta_prompt = "Professional email rewriting instructions..."
-    ppo_rewriter.meta_prompt_manager.get_meta_prompt.return_value = expected_meta_prompt
+    llm_rewriter.meta_prompt_manager.get_meta_prompt.return_value = expected_meta_prompt
     
     # Mock LLM response
-    ppo_rewriter.rewriter_llm.generate.return_value = "Rewritten prompt output"
+    llm_rewriter.rewriter_llm.generate.return_value = "Rewritten prompt output"
     
     # Test rewriting
-    await ppo_rewriter.rewrite_prompt(rewrite_context, mode="conservative")
+    await llm_rewriter.rewrite_prompt(rewrite_context, mode="conservative")
     
     # Verify meta-prompt manager was called with correct parameters
-    ppo_rewriter.meta_prompt_manager.get_meta_prompt.assert_called_once_with(
+    llm_rewriter.meta_prompt_manager.get_meta_prompt.assert_called_once_with(
         rewrite_context.email_scenario,
         rewrite_context.constraints
     )
@@ -302,12 +302,12 @@ async def test_meta_prompt_integration(ppo_rewriter, rewrite_context):
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_build_rewrite_instruction(ppo_rewriter, rewrite_context):
+async def test_build_rewrite_instruction(llm_rewriter, rewrite_context):
     """Test building of rewrite instruction"""
     meta_prompt = "Rewrite this prompt effectively:"
     
     # Test instruction building
-    instruction = ppo_rewriter._build_rewrite_instruction(rewrite_context, meta_prompt)
+    instruction = llm_rewriter._build_rewrite_instruction(rewrite_context, meta_prompt)
     
     # Verify instruction contains expected components
     assert meta_prompt in instruction
@@ -319,10 +319,10 @@ async def test_build_rewrite_instruction(ppo_rewriter, rewrite_context):
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_feedback_summarization(ppo_rewriter):
+async def test_feedback_summarization(llm_rewriter):
     """Test summarization of recent feedback"""
     # Test with empty feedback
-    summary = ppo_rewriter._summarize_feedback([])
+    summary = llm_rewriter._summarize_feedback([])
     assert summary == "No recent feedback"
     
     # Test with feedback list
@@ -333,7 +333,7 @@ async def test_feedback_summarization(ppo_rewriter):
         type('MockFeedback', (), {'action': 'edit'})()
     ]
     
-    summary = ppo_rewriter._summarize_feedback(mock_feedback)
+    summary = llm_rewriter._summarize_feedback(mock_feedback)
     assert "accept" in summary
     assert "reject" in summary
     assert "edit" in summary
