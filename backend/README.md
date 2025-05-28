@@ -33,6 +33,13 @@ Loop Learner implements a comprehensive prompt optimization platform inspired by
 - **Learning Efficiency**: Feedback-to-optimization ratios, pattern analysis
 - **Modern UI**: Tailwind CSS responsive design with auto-refresh capabilities
 
+### 🎭 **Complete Demonstration Workflows**
+- **Automated Demo Scenarios**: 3 predefined learning scenarios (Professional Email, Customer Service, Technical Communication)
+- **Guided User Experience**: Step-by-step workflow with real-time progress visualization
+- **End-to-End Learning Cycle**: Complete demonstration from feedback collection to optimization
+- **Demo Analytics**: Comprehensive metrics and reporting for demonstration results
+- **Interactive Workflows**: REST API integration with React frontend for seamless demo experience
+
 ### 🏗️ **Production Architecture**
 - **Django REST API**: Comprehensive backend with async ORM operations
 - **React + TypeScript Frontend**: Modern UI with navigation between demo and dashboard
@@ -48,13 +55,15 @@ Loop Learner implements a comprehensive prompt optimization platform inspired by
 2. **Evaluation Engine** - A/B testing and automated prompt performance measurement
 3. **Background Scheduler** - Periodic optimization checks and system monitoring
 4. **Dashboard Controller** - Real-time metrics and analytics API
-5. **Unified LLM Provider** - Multi-provider support with real log probabilities
-6. **Reward Aggregator** - Multi-dimensional scoring with perplexity calculation
-7. **Prompt Rewriter** - LLM-based rewriting with similarity matching
+5. **Demo Workflow Orchestrator** - Complete demonstration scenarios with automated learning cycles
+6. **Unified LLM Provider** - Multi-provider support with real log probabilities
+7. **Reward Aggregator** - Multi-dimensional scoring with perplexity calculation
+8. **Prompt Rewriter** - LLM-based rewriting with similarity matching
 
 ### Frontend Features
 
 - **Demo Mode**: Interactive email generation, draft creation, and feedback collection
+- **Workflow Mode**: Complete demonstration scenarios with guided learning steps
 - **Dashboard Mode**: Real-time system monitoring and performance analytics
 - **Responsive Design**: Tailwind CSS with mobile-first approach
 - **Auto-Refresh**: 30-second intervals for live dashboard updates
@@ -102,6 +111,13 @@ ollama pull llama3.2:3b
 5. **Provide Feedback**: Use Accept/Reject/Edit/Skip buttons to train the system
 6. **Batch Learning**: System automatically triggers optimization when sufficient feedback accumulates
 
+### Workflow Mode  
+1. **Switch to Workflow**: Click "Workflow" tab in the header
+2. **Select Scenario**: Choose from 3 predefined learning scenarios
+3. **Run Demo**: Execute complete demonstration with automated steps
+4. **Monitor Progress**: Watch real-time learning progress and optimization
+5. **Review Results**: Analyze demo metrics and learning objectives achieved
+
 ### Dashboard Mode
 1. **Switch to Dashboard**: Click "Dashboard" tab in the header
 2. **Monitor System**: View real-time system status and scheduler health
@@ -121,6 +137,12 @@ ollama pull llama3.2:3b
 - `POST /api/optimization/scheduler/` - Start/stop/configure optimization scheduler
 - `GET /api/optimization/history/` - View optimization history and metrics
 - `GET /api/optimization/health/` - Health check for optimization system
+
+### Demo Workflow APIs
+- `POST /api/demo/workflow/` - Run complete demonstration scenarios
+- `GET /api/demo/status/` - Monitor demo workflow progress and status
+- `POST /api/demo/reset/` - Reset demo data for clean start
+- `GET /api/demo/health/` - Health check for demo workflow system
 
 ### Dashboard & Analytics APIs
 - `GET /api/dashboard/overview/` - Complete dashboard data with all metrics
@@ -173,13 +195,14 @@ This implementation is inspired by and builds upon:
 ## Testing
 
 ```bash
-# Run all tests (65+ comprehensive tests)
+# Run all tests (80+ comprehensive tests)
 uv run pytest
 
 # Run specific test suites
 uv run pytest tests/test_optimization_orchestrator.py  # Batch optimization
 uv run pytest tests/test_evaluation_engine.py         # A/B testing
 uv run pytest tests/test_dashboard_controller.py      # Dashboard APIs
+uv run pytest tests/test_demo_workflow.py             # Demo workflows
 uv run pytest tests/test_log_probabilities.py         # Learning functions
 uv run pytest tests/test_learning_pipeline.py         # End-to-end learning
 
@@ -204,6 +227,7 @@ cd frontend && pnpm dev
 - Optimization Orchestrator: 16/16 tests passing  
 - Evaluation Engine: 13/13 tests passing
 - Dashboard Controller: 14/14 tests passing
+- Demo Workflow System: 14/14 tests passing
 - API Endpoints: 23/23 tests passing
 
 ## Development Status
@@ -215,8 +239,9 @@ cd frontend && pnpm dev
 - Background scheduler with configurable triggers and rate limiting
 - Real log probabilities calculation for genuine perplexity-based rewards
 - A/B testing engine with statistical significance validation
-- Modern Tailwind CSS responsive frontend with demo and dashboard modes
-- Comprehensive test suite with 65+ tests covering all functionality
+- Complete demonstration workflows with 3 predefined learning scenarios
+- Modern Tailwind CSS responsive frontend with demo, workflow, and dashboard modes
+- Comprehensive test suite with 80+ tests covering all functionality
 
 **🎯 System Highlights:**
 - **Intelligence**: Genuine learning from human feedback with statistical validation
@@ -251,7 +276,7 @@ MIT License - see LICENSE file for details
 
 ---
 
-**Loop Learner** represents a complete, production-ready human-in-the-loop machine learning platform that intelligently learns from user feedback, optimizes prompts through statistical analysis, and provides real-time visibility into learning progress and system performance.
+**Loop Learner** represents a complete, production-ready human-in-the-loop machine learning platform that intelligently learns from user feedback, optimizes prompts through statistical analysis, provides real-time visibility into learning progress and system performance, and offers comprehensive demonstration workflows for showcasing adaptive learning capabilities.
 
 > Generated with [Claude Code](https://claude.ai/code)
 
