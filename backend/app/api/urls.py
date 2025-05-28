@@ -12,6 +12,11 @@ from .views import (
     HealthCheckView,
     GetSystemMetricsView,
 )
+from .optimization_status_controller import (
+    OptimizationStatusView,
+    OptimizationHistoryView,
+    optimization_health_check,
+)
 
 urlpatterns = [
     # Email endpoints
@@ -31,6 +36,11 @@ urlpatterns = [
     path('optimization/trigger/', TriggerOptimizationView.as_view(), name='trigger-optimization'),
     path('optimization/<str:optimization_id>/status/', GetOptimizationProgressView.as_view(), name='get-optimization-status'),
     path('learning/progress/', GetOptimizationProgressView.as_view(), name='get-learning-progress'),
+    
+    # Automated optimization control endpoints
+    path('optimization/scheduler/', OptimizationStatusView.as_view(), name='optimization-scheduler'),
+    path('optimization/history/', OptimizationHistoryView.as_view(), name='optimization-history'),
+    path('optimization/health/', optimization_health_check, name='optimization-health'),
     
     # Health and metrics endpoints
     path('health/', HealthCheckView.as_view(), name='health-check'),
