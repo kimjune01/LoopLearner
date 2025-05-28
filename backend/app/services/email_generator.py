@@ -106,6 +106,26 @@ class SyntheticEmailGenerator(EmailGenerator):
         
         return email
     
+    def generate_synthetic_email_sync(self, scenario_type: str = "random") -> Email:
+        """Generate a synthetic email for testing (sync version)"""
+        if scenario_type == "random":
+            scenario_type = random.choice(list(self.TEMPLATES.keys()))
+        
+        if scenario_type not in self.TEMPLATES:
+            scenario_type = "professional"  # fallback
+            
+        template = self.TEMPLATES[scenario_type]
+        
+        email = Email.objects.create(
+            subject=random.choice(template['subjects']),
+            body=random.choice(template['bodies']),
+            sender=random.choice(template['senders']),
+            scenario_type=scenario_type,
+            is_synthetic=True
+        )
+        
+        return email
+    
     async def generate_batch_emails(self, count: int, scenarios: List[str]) -> List[Email]:
         """Generate multiple synthetic emails"""
         emails = []

@@ -115,6 +115,33 @@ Loop Learner implements a multi-layered feedback system where AI agents learn fr
 
 See [REQUIREMENTS.md](./REQUIREMENTS.md) for detailed functional and technical requirements.
 
+## Research Foundation
+
+This project builds upon cutting-edge research in prompt optimization and human-in-the-loop learning:
+
+### Core Methodologies
+
+**PRewrite: Prompt Rewriting with Reinforcement Learning**
+- *Authors*: Weize Kong, Spurthi Amba Hombaiah, Mingyang Zhang, Qiaozhu Mei, Michael Bendersky
+- *Paper*: [arXiv:2401.08189](https://arxiv.org/abs/2401.08189)
+- *Application*: Dual-LLM architecture, PPO-based prompt optimization, meta-prompt framework
+
+**Key Techniques Implemented:**
+- **Reinforcement Learning**: PPO with KL penalty for stable prompt rewriting
+- **Multi-Metric Rewards**: F1 + Perplexity hybrid reward functions (proven most effective)
+- **Dual-LLM Architecture**: Separate rewriter and task LLMs for specialized optimization
+- **Meta-Prompt Guidance**: Template-based prompt rewriting instructions
+
+### Attribution
+
+Loop Learner extends the PRewrite methodology by:
+- Adding comprehensive human feedback integration
+- Implementing scenario-specific optimization strategies  
+- Creating adaptive learning rates based on user expertise
+- Building interpretability and control mechanisms for human oversight
+
+We acknowledge and thank the research community for these foundational contributions to automated prompt engineering.
+
 ## License
 
 TBD

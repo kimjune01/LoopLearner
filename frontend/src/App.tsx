@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { healthCheck } from './services/api'
+import { InnerLoopProgress } from './components/InnerLoopProgress'
 import './App.css'
 
 function App() {
@@ -25,6 +26,8 @@ function App() {
         <div className="card">
           <p>Backend Status: <strong>{backendStatus}</strong></p>
         </div>
+        
+        <InnerLoopProgress />
       </div>
     </>
   )

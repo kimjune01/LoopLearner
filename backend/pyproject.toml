@@ -10,12 +10,19 @@ dependencies = [
     "djangorestframework>=3.16.0",
     "fastapi>=0.115.12",
     "openai>=1.82.0",
+    "ollama>=0.4.6",
     "pytest>=8.3.5",
     "pytest-asyncio>=1.0.0",
     "pytest-django>=4.11.1",
     "requests>=2.32.3",
     "uvicorn>=0.34.2",
+    "django-cors-headers>=4.7.0",
 ]
 
 [tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "looplearner.settings"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+addopts = "--reuse-db --tb=short"
+testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
+asyncio_mode = "auto"

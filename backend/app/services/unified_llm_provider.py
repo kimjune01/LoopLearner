@@ -1,0 +1,397 @@
+"""
+Unified LLM Provider System
+Supports multiple backends: Ollama (local), OpenAI, Anthropic, etc.
+Configurable via environment variables for easy switching
+"""
+
+import asyncio
+import os
+from abc import ABC, abstractmethod
+from typing import Dict, Any, List, Optional, Union
+from dataclasses import dataclass
+import json
+
+
+@dataclass
+class LLMConfig:
+    """Configuration for LLM providers"""
+    provider: str  # "ollama", "openai", "anthropic", "mock"
+    model: str
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    temperature: float = 0.7
+    max_tokens: int = 500
+
+
+@dataclass
+class EmailDraft:
+    """Standardized email draft response"""
+    content: str
+    reasoning: List[str]
+    confidence: float
+    draft_id: int
+    metadata: Dict[str, Any] = None
+
+
+class BaseLLMProvider(ABC):
+    """Abstract base class for all LLM providers"""
+    
+    def __init__(self, config: LLMConfig):
+        self.config = config
+    
+    @abstractmethod
+    async def generate(
+        self, 
+        prompt: str, 
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        system_prompt: Optional[str] = None
+    ) -> str:
+        """Generate text response"""
+        pass
+    
+    @abstractmethod
+    async def generate_drafts(
+        self, 
+        email_content: str, 
+        system_prompt: str,
+        user_preferences: List[Dict[str, Any]] = None,
+        constraints: Dict[str, Any] = None,
+        num_drafts: int = 3
+    ) -> List[EmailDraft]:
+        """Generate multiple email draft responses"""
+        pass
+    
+    @abstractmethod
+    async def health_check(self) -> Dict[str, Any]:
+        """Check provider health and availability"""
+        pass
+
+
+class OllamaProvider(BaseLLMProvider):
+    """Ollama local model provider"""
+    
+    def __init__(self, config: LLMConfig):
+        super().__init__(config)
+        import ollama
+        base_url = config.base_url or "localhost:11434"
+        self.client = ollama.Client(host=f"http://{base_url}")
+    
+    async def generate(
+        self, 
+        prompt: str, 
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        system_prompt: Optional[str] = None
+    ) -> str:
+        """Generate text using Ollama"""
+        
+        temp = temperature or self.config.temperature
+        tokens = max_tokens or self.config.max_tokens
+        
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        try:
+            response = await asyncio.to_thread(
+                self.client.chat,
+                model=self.config.model,
+                messages=messages,
+                options={"temperature": temp, "num_predict": tokens}
+            )
+            return response['message']['content'].strip()
+        except Exception as e:
+            return f"Ollama Error: {str(e)}"
+    
+    async def generate_drafts(
+        self, 
+        email_content: str, 
+        system_prompt: str,
+        user_preferences: List[Dict[str, Any]] = None,
+        constraints: Dict[str, Any] = None,
+        num_drafts: int = 3
+    ) -> List[EmailDraft]:
+        """Generate email drafts using Ollama"""
+        
+        drafts = []
+        for i in range(num_drafts):
+            temperature = 0.3 + (i * 0.3)  # Vary temperature for diversity
+            
+            prompt = self._build_draft_prompt(
+                email_content, user_preferences, constraints, i+1
+            )
+            
+            response = await self.generate(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                temperature=temperature,
+                max_tokens=800
+            )
+            
+            draft = self._parse_draft_response(response, i+1)
+            drafts.append(draft)
+        
+        return drafts
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """Check Ollama health"""
+        try:
+            response = await asyncio.to_thread(
+                self.client.chat,
+                model=self.config.model,
+                messages=[{"role": "user", "content": "Hello"}],
+                options={"num_predict": 5}
+            )
+            return {
+                "status": "healthy",
+                "provider": "ollama",
+                "model": self.config.model,
+                "response_sample": response['message']['content'][:30]
+            }
+        except Exception as e:
+            return {
+                "status": "unhealthy",
+                "provider": "ollama", 
+                "model": self.config.model,
+                "error": str(e)
+            }
+    
+    def _build_draft_prompt(self, email_content: str, user_preferences: List[Dict] = None, 
+                          constraints: Dict = None, draft_num: int = 1) -> str:
+        """Build structured prompt for draft generation"""
+        
+        parts = [
+            f"Generate professional email response (Draft #{draft_num}):",
+            f"\n--- INCOMING EMAIL ---\n{email_content}\n--- END EMAIL ---\n"
+        ]
+        
+        if user_preferences:
+            parts.append("USER PREFERENCES:")
+            for pref in user_preferences:
+                if pref.get('is_active', True):
+                    parts.append(f"- {pref['key']}: {pref['value']}")
+            parts.append("")
+        
+        if constraints:
+            parts.append("CONSTRAINTS:")
+            for key, value in constraints.items():
+                parts.append(f"- {key}: {value}")
+            parts.append("")
+        
+        # Style variation by draft number
+        styles = {
+            1: "STYLE: Formal and professional",
+            2: "STYLE: Friendly and conversational", 
+            3: "STYLE: Concise and direct"
+        }
+        parts.append(styles.get(draft_num, "STYLE: Professional"))
+        
+        parts.extend([
+            "",
+            "FORMAT YOUR RESPONSE EXACTLY AS:",
+            "DRAFT:",
+            "[Your email response here]",
+            "",
+            "REASONING:",
+            "1. [First reasoning factor]",
+            "2. [Second reasoning factor]",
+            "3. [Third reasoning factor]"
+        ])
+        
+        return "\n".join(parts)
+    
+    def _parse_draft_response(self, response: str, draft_id: int) -> EmailDraft:
+        """Parse LLM response into structured EmailDraft"""
+        
+        try:
+            # Extract draft content
+            if "REASONING:" in response:
+                draft_content = response.split("REASONING:")[0].replace("DRAFT:", "").strip()
+                reasoning_text = response.split("REASONING:")[1].strip()
+            else:
+                draft_content = response.replace("DRAFT:", "").strip()
+                reasoning_text = ""
+            
+            # Extract reasoning factors
+            reasoning = []
+            for line in reasoning_text.split('\n'):
+                line = line.strip()
+                if any(line.startswith(p) for p in ['1.', '2.', '3.', '-', '•']):
+                    clean = line
+                    for prefix in ['1.', '2.', '3.', '-', '•']:
+                        clean = clean.replace(prefix, '', 1).strip()
+                    if clean:
+                        reasoning.append(clean)
+            
+            # Fallback reasoning if none found
+            if not reasoning:
+                reasoning = [
+                    "Professional tone maintained",
+                    "Addresses key points from original email",
+                    "Appropriate length and structure"
+                ]
+            
+            # Calculate confidence
+            confidence = self._calculate_confidence(draft_content, reasoning)
+            
+            return EmailDraft(
+                content=draft_content,
+                reasoning=reasoning[:3],
+                confidence=confidence,
+                draft_id=draft_id,
+                metadata={"provider": "ollama", "model": self.config.model}
+            )
+            
+        except Exception as e:
+            return EmailDraft(
+                content=response[:300] + "..." if len(response) > 300 else response,
+                reasoning=["Error parsing response", "Content may need review"],
+                confidence=0.3,
+                draft_id=draft_id,
+                metadata={"error": str(e)}
+            )
+    
+    def _calculate_confidence(self, content: str, reasoning: List[str]) -> float:
+        """Calculate confidence score based on response quality"""
+        confidence = 0.6  # Base
+        
+        if 30 <= len(content) <= 800: confidence += 0.1
+        if len(reasoning) >= 3: confidence += 0.1
+        if any(word in content.lower() for word in ['thank', 'please', 'regards']): confidence += 0.1
+        if not any(word in content.lower() for word in ['error', 'fail', 'issue']): confidence += 0.1
+        
+        return min(1.0, confidence)
+
+
+class OpenAIProvider(BaseLLMProvider):
+    """OpenAI API provider"""
+    
+    def __init__(self, config: LLMConfig):
+        super().__init__(config)
+        import openai
+        self.client = openai.AsyncOpenAI(api_key=config.api_key)
+    
+    async def generate(
+        self, 
+        prompt: str, 
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        system_prompt: Optional[str] = None
+    ) -> str:
+        """Generate text using OpenAI API"""
+        
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.config.model,
+                messages=messages,
+                temperature=temperature or self.config.temperature,
+                max_tokens=max_tokens or self.config.max_tokens
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            return f"OpenAI Error: {str(e)}"
+    
+    async def generate_drafts(
+        self, 
+        email_content: str, 
+        system_prompt: str,
+        user_preferences: List[Dict[str, Any]] = None,
+        constraints: Dict[str, Any] = None,
+        num_drafts: int = 3
+    ) -> List[EmailDraft]:
+        """Generate email drafts using OpenAI"""
+        # Similar implementation to Ollama but using OpenAI API
+        # Implementation would be similar to OllamaProvider.generate_drafts()
+        # but using self.client.chat.completions.create()
+        pass
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """Check OpenAI API health"""
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.config.model,
+                messages=[{"role": "user", "content": "Hello"}],
+                max_tokens=5
+            )
+            return {
+                "status": "healthy",
+                "provider": "openai",
+                "model": self.config.model,
+                "response_sample": response.choices[0].message.content[:30]
+            }
+        except Exception as e:
+            return {
+                "status": "unhealthy",
+                "provider": "openai",
+                "model": self.config.model,
+                "error": str(e)
+            }
+
+
+class MockProvider(BaseLLMProvider):
+    """Mock provider for testing"""
+    
+    async def generate(self, prompt: str, **kwargs) -> str:
+        return f"Mock response to: {prompt[:50]}..."
+    
+    async def generate_drafts(self, email_content: str, system_prompt: str, **kwargs) -> List[EmailDraft]:
+        return [
+            EmailDraft(
+                content=f"Mock draft response to email about: {email_content[:30]}...",
+                reasoning=["Mock reasoning 1", "Mock reasoning 2", "Mock reasoning 3"],
+                confidence=0.8,
+                draft_id=i+1,
+                metadata={"provider": "mock"}
+            ) for i in range(kwargs.get('num_drafts', 3))
+        ]
+    
+    async def health_check(self) -> Dict[str, Any]:
+        return {"status": "healthy", "provider": "mock", "model": "mock-model"}
+
+
+class LLMProviderFactory:
+    """Factory for creating LLM providers based on configuration"""
+    
+    @staticmethod
+    def create_provider(config: LLMConfig) -> BaseLLMProvider:
+        """Create appropriate provider based on config"""
+        
+        providers = {
+            "ollama": OllamaProvider,
+            "openai": OpenAIProvider,
+            "mock": MockProvider
+        }
+        
+        provider_class = providers.get(config.provider.lower())
+        if not provider_class:
+            raise ValueError(f"Unsupported provider: {config.provider}")
+        
+        return provider_class(config)
+    
+    @staticmethod
+    def from_environment() -> BaseLLMProvider:
+        """Create provider from environment variables"""
+        
+        config = LLMConfig(
+            provider=os.getenv("LLM_PROVIDER", "ollama"),
+            model=os.getenv("LLM_MODEL", "llama3.2:3b"),
+            api_key=os.getenv("LLM_API_KEY"),
+            base_url=os.getenv("LLM_BASE_URL"),
+            temperature=float(os.getenv("LLM_TEMPERATURE", "0.7")),
+            max_tokens=int(os.getenv("LLM_MAX_TOKENS", "500"))
+        )
+        
+        return LLMProviderFactory.create_provider(config)
+
+
+# Convenience function for easy access
+def get_llm_provider() -> BaseLLMProvider:
+    """Get configured LLM provider instance"""
+    return LLMProviderFactory.from_environment()
