@@ -1,12 +1,35 @@
 from django.db import models
 from django.utils import timezone
 import json
+import uuid
+
+
+class Session(models.Model):
+    """Learning sessions with isolated state and prompt evolution"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+    
+    # Session metadata
+    optimization_iterations = models.IntegerField(default=0)
+    total_emails_processed = models.IntegerField(default=0)
+    total_feedback_collected = models.IntegerField(default=0)
+    
+    class Meta:
+        ordering = ['-updated_at']
+    
+    def __str__(self):
+        return f"{self.name} ({self.created_at.strftime('%Y-%m-%d')})"
 
 
 class SystemPrompt(models.Model):
     """System prompt versions with evolution tracking"""
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='prompts', null=True, blank=True)
     content = models.TextField()
-    version = models.IntegerField(unique=True)
+    version = models.IntegerField()  # Session-scoped version (global when session is null)
     created_at = models.DateTimeField(default=timezone.now)
     is_active = models.BooleanField(default=False)
     performance_score = models.FloatField(null=True, blank=True)
@@ -15,11 +38,14 @@ class SystemPrompt(models.Model):
         ordering = ['-version']
     
     def __str__(self):
-        return f"Prompt v{self.version}"
+        if self.session:
+            return f"{self.session.name} Prompt v{self.version}"
+        return f"Global Prompt v{self.version}"
 
 
 class UserPreference(models.Model):
     """User preferences in natural language"""
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='preferences', null=True, blank=True)
     key = models.CharField(max_length=100)
     value = models.TextField()
     description = models.TextField(blank=True)
@@ -28,10 +54,12 @@ class UserPreference(models.Model):
     is_active = models.BooleanField(default=True)
     
     class Meta:
-        unique_together = ('key',)
+        pass  # Remove unique constraint for now
     
     def __str__(self):
-        return f"{self.key}: {self.value[:50]}"
+        if self.session:
+            return f"{self.session.name} - {self.key}: {self.value[:50]}"
+        return f"Global - {self.key}: {self.value[:50]}"
 
 
 class Email(models.Model):
@@ -44,6 +72,7 @@ class Email(models.Model):
         ('inquiry', 'Inquiry'),
     ]
     
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='emails', null=True, blank=True)
     subject = models.CharField(max_length=500)
     body = models.TextField()
     sender = models.EmailField()
@@ -52,7 +81,9 @@ class Email(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     
     def __str__(self):
-        return f"{self.subject[:50]} ({self.scenario_type})"
+        if self.session:
+            return f"{self.session.name} - {self.subject[:50]} ({self.scenario_type})"
+        return f"Global - {self.subject[:50]} ({self.scenario_type})"
 
 
 class DraftReason(models.Model):

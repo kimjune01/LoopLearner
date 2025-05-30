@@ -91,6 +91,42 @@ The system generates draft email responses as a technical demonstration vehicle.
 - **FR-033**: Exported data MUST include user preferences
 - **FR-034**: Exported data MUST include evaluation snapshots
 
+### 2.6 Session Management and Frontend Interface
+
+#### 2.6.1 Session Creation and Management
+
+- **FR-035**: Users SHALL be able to create new learning sessions
+- **FR-036**: Each session MUST be associated with a specific system prompt and its evolution history
+- **FR-037**: Sessions MUST persist across browser sessions and device changes
+- **FR-038**: Users SHALL be able to name and describe sessions for easy identification
+- **FR-039**: System MUST track session creation date, last activity, and optimization iterations
+
+#### 2.6.2 Session Collection View
+
+- **FR-040**: Frontend MUST provide a collection view displaying all user sessions
+- **FR-041**: Session collection MUST show session name, description, creation date, and last activity
+- **FR-042**: Session collection MUST indicate current optimization status (active, paused, completed)
+- **FR-043**: Users SHALL be able to filter and search sessions by name, date, or status
+- **FR-044**: Users SHALL be able to sort sessions by creation date, last activity, or name
+- **FR-045**: Session collection MUST provide quick actions (delete, duplicate, export)
+
+#### 2.6.3 Session Detail View
+
+- **FR-046**: Clicking on a session MUST navigate to a dedicated session overview page
+- **FR-047**: Session overview MUST contain all functionality currently shown on the homepage
+- **FR-048**: Session overview MUST display current system prompt and its evolution history
+- **FR-049**: Session overview MUST show session-specific learning metrics and progress
+- **FR-050**: Session overview MUST provide session-scoped email generation and feedback collection
+- **FR-051**: Users SHALL be able to export individual session data
+- **FR-052**: Users SHALL be able to switch between sessions without losing current work
+
+#### 2.6.4 Session State Isolation
+
+- **FR-053**: Each session MUST maintain independent system state and prompt evolution
+- **FR-054**: Feedback provided in one session MUST NOT affect other sessions
+- **FR-055**: Session data MUST be isolated to prevent cross-contamination
+- **FR-056**: Users SHALL be able to work on multiple sessions simultaneously in different browser tabs
+
 ## 3. Non-Functional Requirements
 
 ### 3.1 Performance Requirements
@@ -187,11 +223,15 @@ The system generates draft email responses as a technical demonstration vehicle.
 
 **Key Components:**
 
-- `EmailGenerator`: Button-triggered fake email generation
-- `DraftViewer`: Display multiple email drafts with reasoning
-- `FeedbackCollector`: Capture user decisions and ratings (including ignore option)
-- `ProgressDashboard`: Show learning progress and confidence metrics
-- `StateExporter`: Handle data export functionality
+- `SessionCollection`: Display and manage all user sessions with filtering and search
+- `SessionOverview`: Session-specific view containing all current homepage functionality
+- `EmailGenerator`: Button-triggered fake email generation (session-scoped)
+- `DraftViewer`: Display multiple email drafts with reasoning (session-scoped)
+- `FeedbackCollector`: Capture user decisions and ratings (session-scoped)
+- `ProgressDashboard`: Show learning progress and confidence metrics (session-scoped)
+- `StateExporter`: Handle data export functionality (global and session-specific)
+- `SessionCreator`: Interface for creating new sessions with name and description
+- `PromptEvolutionViewer`: Display system prompt history and evolution within a session
 
 #### 5.2.2 Backend Repository (`backend/`)
 
@@ -211,10 +251,11 @@ The system generates draft email responses as a technical demonstration vehicle.
 
 **Key Components:**
 
-- `EmailController`: Handle fake email generation and draft requests
-- `FeedbackController`: Process user feedback (including ignore actions)
-- `StateController`: Manage state persistence and export
-- `OptimizationController`: Trigger and monitor optimization cycles
+- `SessionController`: Create, read, update, delete session management
+- `EmailController`: Handle fake email generation and draft requests (session-scoped)
+- `FeedbackController`: Process user feedback (session-scoped, including ignore actions)
+- `StateController`: Manage state persistence and export (global and session-specific)
+- `OptimizationController`: Trigger and monitor optimization cycles (session-scoped)
 
 #### 5.2.3 Draft Generation Module (Backend: `drafters/`)
 

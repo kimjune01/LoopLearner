@@ -1,8 +1,17 @@
 from rest_framework import serializers
 from .models import (
-    SystemPrompt, UserPreference, Email, DraftReason, Draft, 
+    Session, SystemPrompt, UserPreference, Email, DraftReason, Draft, 
     UserFeedback, ReasonRating, EvaluationSnapshot, OptimizationRun
 )
+
+
+class SessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Session
+        fields = [
+            'id', 'name', 'description', 'created_at', 'updated_at', 'is_active',
+            'optimization_iterations', 'total_emails_processed', 'total_feedback_collected'
+        ]
 
 
 class DraftReasonSerializer(serializers.ModelSerializer):

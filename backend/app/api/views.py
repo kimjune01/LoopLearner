@@ -8,7 +8,7 @@ import asyncio
 import logging
 from asgiref.sync import sync_to_async
 
-from core.models import Email, Draft, DraftReason, SystemPrompt, UserFeedback, ReasonRating
+from core.models import Session, Email, Draft, DraftReason, SystemPrompt, UserFeedback, ReasonRating
 from app.services.unified_llm_provider import LLMProviderFactory, EmailDraft
 from app.services.email_generator import SyntheticEmailGenerator
 from app.services.human_feedback_integrator import HumanFeedbackIntegrator
@@ -32,7 +32,26 @@ class EmailAPIView(APIView):
 class GenerateSyntheticEmailView(EmailAPIView):
     """Generate synthetic email for testing"""
     
-    def post(self, request):
+    def post(self, request, session_id=None):
+        # Handle both session-scoped and legacy calls
+        if session_id:
+            session = get_object_or_404(Session, id=session_id, is_active=True)
+        else:
+            # For legacy support, use a default session or create one
+            session = Session.objects.filter(is_active=True).first()
+            if not session:
+                session = Session.objects.create(
+                    name="Default Session",
+                    description="Auto-created for legacy API compatibility"
+                )
+                # Create initial prompt for default session
+                SystemPrompt.objects.create(
+                    session=session,
+                    content="You are a helpful email assistant that generates professional and appropriate email responses.",
+                    version=1,
+                    is_active=True
+                )
+        
         # Handle both JSON and form data
         if hasattr(request, 'data'):
             data = request.data
@@ -43,7 +62,7 @@ class GenerateSyntheticEmailView(EmailAPIView):
         
         # Generate synthetic email (use sync method)
         generator = SyntheticEmailGenerator()
-        email = generator.generate_synthetic_email_sync(scenario_type)
+        email = generator.generate_synthetic_email_sync(scenario_type, session=session)
         
         return Response({
             'email_id': email.id,
@@ -51,15 +70,22 @@ class GenerateSyntheticEmailView(EmailAPIView):
             'body': email.body,
             'sender': email.sender,
             'scenario_type': email.scenario_type,
-            'created_at': email.created_at.isoformat()
+            'created_at': email.created_at.isoformat(),
+            'session_id': str(session.id)
         }, status=status.HTTP_201_CREATED)
 
 
 class CreateDraftView(EmailAPIView):
     """Create draft response for an email"""
     
-    def post(self, request, email_id):
-        email = get_object_or_404(Email, id=email_id)
+    def post(self, request, email_id, session_id=None):
+        if session_id:
+            # Session-scoped: verify email belongs to session
+            session = get_object_or_404(Session, id=session_id, is_active=True)
+            email = get_object_or_404(Email, id=email_id, session=session)
+        else:
+            # Legacy: any email
+            email = get_object_or_404(Email, id=email_id)
         
         # Handle both JSON and form data
         if hasattr(request, 'data'):

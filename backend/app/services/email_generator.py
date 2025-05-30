@@ -106,7 +106,7 @@ class SyntheticEmailGenerator(EmailGenerator):
         
         return email
     
-    def generate_synthetic_email_sync(self, scenario_type: str = "random") -> Email:
+    def generate_synthetic_email_sync(self, scenario_type: str = "random", session=None) -> Email:
         """Generate a synthetic email for testing (sync version)"""
         if scenario_type == "random":
             scenario_type = random.choice(list(self.TEMPLATES.keys()))
@@ -116,13 +116,18 @@ class SyntheticEmailGenerator(EmailGenerator):
             
         template = self.TEMPLATES[scenario_type]
         
-        email = Email.objects.create(
-            subject=random.choice(template['subjects']),
-            body=random.choice(template['bodies']),
-            sender=random.choice(template['senders']),
-            scenario_type=scenario_type,
-            is_synthetic=True
-        )
+        email_data = {
+            'subject': random.choice(template['subjects']),
+            'body': random.choice(template['bodies']),
+            'sender': random.choice(template['senders']),
+            'scenario_type': scenario_type,
+            'is_synthetic': True
+        }
+        
+        if session:
+            email_data['session'] = session
+        
+        email = Email.objects.create(**email_data)
         
         return email
     

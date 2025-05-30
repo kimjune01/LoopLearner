@@ -30,13 +30,33 @@ from .demo_controller import (
     reset_demo_data,
     demo_health_check,
 )
+from .session_controller import (
+    SessionListView,
+    SessionDetailView,
+    SessionExportView,
+    SessionDuplicateView,
+    SessionStatsView,
+)
 
 urlpatterns = [
-    # Email endpoints
+    # Session management endpoints
+    path('sessions/', SessionListView.as_view(), name='session-list'),
+    path('sessions/<uuid:session_id>/', SessionDetailView.as_view(), name='session-detail'),
+    path('sessions/<uuid:session_id>/export/', SessionExportView.as_view(), name='session-export'),
+    path('sessions/<uuid:session_id>/duplicate/', SessionDuplicateView.as_view(), name='session-duplicate'),
+    path('sessions/<uuid:session_id>/stats/', SessionStatsView.as_view(), name='session-stats'),
+    
+    # Session-scoped email endpoints
+    path('sessions/<uuid:session_id>/generate-synthetic-email/', GenerateSyntheticEmailView.as_view(), name='session-generate-synthetic-email'),
+    path('sessions/<uuid:session_id>/emails/<int:email_id>/generate-drafts/', CreateDraftView.as_view(), name='session-generate-drafts'),
+    
+    # Session-scoped feedback endpoints
+    path('sessions/<uuid:session_id>/drafts/<int:draft_id>/submit-feedback/', SubmitFeedbackView.as_view(), name='session-submit-feedback'),
+    path('sessions/<uuid:session_id>/reasons/<int:reason_id>/rate-reasoning/', RateReasoningFactorsView.as_view(), name='session-rate-reasoning'),
+    
+    # Legacy endpoints (for backward compatibility)
     path('generate-synthetic-email/', GenerateSyntheticEmailView.as_view(), name='generate-synthetic-email'),
     path('emails/<int:email_id>/generate-drafts/', CreateDraftView.as_view(), name='generate-drafts'),
-    
-    # Feedback endpoints - use draft_id not email_id for consistency with tests
     path('drafts/<int:draft_id>/submit-feedback/', SubmitFeedbackView.as_view(), name='submit-feedback'),
     path('reasons/<int:reason_id>/rate-reasoning/', RateReasoningFactorsView.as_view(), name='rate-reasoning'),
     
