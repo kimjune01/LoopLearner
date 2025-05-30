@@ -10,6 +10,6 @@ export const api = axios.create({
 });
 
 export const healthCheck = async () => {
-  const response = await api.get('/health');
+  const response = await api.get('/api/health/');
   return response.data;
 };

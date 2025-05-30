@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { EmailMessage } from '../types/email';
+import type { EmailMessage } from '../types/email';
 import { emailService } from '../services/emailService';
 
 interface EmailGeneratorProps {

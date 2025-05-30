@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { EmailDraft, DraftReason } from '../types/email';
+import type { EmailDraft } from '../types/email';
 
 interface DraftViewerProps {
   drafts: EmailDraft[];
