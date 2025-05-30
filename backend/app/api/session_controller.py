@@ -156,6 +156,36 @@ class SessionDetailView(SessionAPIView):
         if 'description' in data:
             session.description = data['description'].strip()
         
+        # Handle initial_prompt updates
+        if 'initial_prompt' in data:
+            prompt_content = data['initial_prompt'].strip()
+            if prompt_content:
+                # Get or create active prompt for this session
+                active_prompt = session.prompts.filter(is_active=True).first()
+                
+                if active_prompt:
+                    # Update existing active prompt
+                    active_prompt.content = prompt_content
+                    active_prompt.save()
+                else:
+                    # Create new prompt as version 1
+                    SystemPrompt.objects.create(
+                        session=session,
+                        content=prompt_content,
+                        version=1,
+                        is_active=True
+                    )
+                    
+                # Update session's initial_prompt field as well
+                session.initial_prompt = prompt_content
+            else:
+                # If empty prompt, deactivate current active prompt
+                active_prompt = session.prompts.filter(is_active=True).first()
+                if active_prompt:
+                    active_prompt.is_active = False
+                    active_prompt.save()
+                session.initial_prompt = ''
+        
         try:
             session.save()
             serializer = SessionSerializer(session)

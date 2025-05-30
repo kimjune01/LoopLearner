@@ -75,5 +75,11 @@ export const sessionService = {
   async generateDrafts(sessionId: string, emailId: number, data: { num_drafts?: number }): Promise<any> {
     const response = await api.post(`/api/sessions/${sessionId}/emails/${emailId}/generate-drafts/`, data);
     return response.data;
+  },
+
+  // Update session prompt
+  async updateSessionPrompt(sessionId: string, prompt: string): Promise<Session> {
+    const response = await api.put(`/api/sessions/${sessionId}/`, { initial_prompt: prompt });
+    return response.data;
   }
 };

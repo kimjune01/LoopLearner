@@ -35,14 +35,14 @@ export const SessionDetail: React.FC = () => {
     if (!session || !id) return;
     
     try {
-      // TODO: Implement API call to save/update session prompt
-      // await sessionService.updateSessionPrompt(id, prompt);
+      // Update session prompt via API
+      await sessionService.updateSessionPrompt(id, prompt);
       
-      // For now, just update the local state
+      // Update local state immediately for responsive UI
       setSession(prev => prev ? { ...prev, initial_prompt: prompt } : null);
       setShowPromptEditor(false);
       
-      // Reload session to get updated data
+      // Reload session to get fresh data from server
       await loadSession();
     } catch (err) {
       console.error('Error saving prompt:', err);
