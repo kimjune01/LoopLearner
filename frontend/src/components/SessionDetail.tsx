@@ -219,16 +219,56 @@ export const SessionDetail: React.FC = () => {
                   </div>
                 ) : (
                   <div className="text-center py-12">
-                    <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
-                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-16 h-16 mx-auto mb-4 bg-purple-100 rounded-full flex items-center justify-center">
+                      <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                       </svg>
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">No System Prompt Set</h3>
-                    <p className="text-gray-600 mb-6">This session needs a system prompt to begin learning.</p>
-                    <button className="btn-primary">
-                      Create System Prompt
-                    </button>
+                    <p className="text-gray-600 mb-6">
+                      This session needs a system prompt to begin learning.
+                      {session.description && (
+                        <span className="block mt-2 text-sm italic">
+                          Use your session description "{session.description}" as inspiration.
+                        </span>
+                      )}
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                      <a 
+                        href="https://console.anthropic.com/dashboard"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-primary flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        Generate with Claude
+                      </a>
+                      <button className="btn-secondary flex items-center justify-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                        Write Manually
+                      </button>
+                    </div>
+                    
+                    {/* Helpful tip */}
+                    <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200 max-w-2xl mx-auto">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0">
+                          <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <div className="text-left">
+                          <p className="text-sm text-blue-800">
+                            <strong>Tip:</strong> Ask Claude to create a system prompt for "{session.name}"{session.description && ` based on: "${session.description}"`}. 
+                            This will give you a great starting point for your learning session.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
