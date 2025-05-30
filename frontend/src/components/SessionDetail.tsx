@@ -2,32 +2,53 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import type { Session } from '../types/session';
 import { sessionService } from '../services/sessionService';
+import { PromptEditor } from './PromptEditor';
 
 export const SessionDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
+
+  const loadSession = async () => {
+    if (!id) return;
+    
+    try {
+      setLoading(true);
+      const sessionData = await sessionService.getSession(id);
+      setSession(sessionData);
+      setError(null);
+    } catch (err) {
+      setError('Failed to load session');
+      console.error('Error loading session:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadSession = async () => {
-      if (!id) return;
-      
-      try {
-        setLoading(true);
-        const sessionData = await sessionService.getSession(id);
-        setSession(sessionData);
-        setError(null);
-      } catch (err) {
-        setError('Failed to load session');
-        console.error('Error loading session:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadSession();
   }, [id]);
+
+  const handleSavePrompt = async (prompt: string) => {
+    if (!session || !id) return;
+    
+    try {
+      // TODO: Implement API call to save/update session prompt
+      // await sessionService.updateSessionPrompt(id, prompt);
+      
+      // For now, just update the local state
+      setSession(prev => prev ? { ...prev, initial_prompt: prompt } : null);
+      setShowPromptEditor(false);
+      
+      // Reload session to get updated data
+      await loadSession();
+    } catch (err) {
+      console.error('Error saving prompt:', err);
+      setError('Failed to save prompt');
+    }
+  };
 
   if (loading) {
     return (
@@ -191,7 +212,10 @@ export const SessionDetail: React.FC = () => {
                     
                     {/* Prompt Actions */}
                     <div className="flex flex-wrap gap-3 justify-center">
-                      <button className="btn-primary flex items-center gap-2">
+                      <button 
+                        onClick={() => setShowPromptEditor(true)}
+                        className="btn-primary flex items-center gap-2"
+                      >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                         </svg>
@@ -245,7 +269,10 @@ export const SessionDetail: React.FC = () => {
                         </svg>
                         Generate with Claude
                       </a>
-                      <button className="btn-secondary flex items-center justify-center gap-2">
+                      <button 
+                        onClick={() => setShowPromptEditor(true)}
+                        className="btn-secondary flex items-center justify-center gap-2"
+                      >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                         </svg>
@@ -399,6 +426,18 @@ export const SessionDetail: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Prompt Editor Modal */}
+      {showPromptEditor && (
+        <PromptEditor
+          initialPrompt={session?.initial_prompt || ''}
+          sessionName={session?.name}
+          sessionDescription={session?.description}
+          onSave={handleSavePrompt}
+          onCancel={() => setShowPromptEditor(false)}
+          isCreating={!session?.initial_prompt}
+        />
+      )}
     </div>
   );
 };
