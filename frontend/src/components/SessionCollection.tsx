@@ -118,15 +118,16 @@ export const SessionCollection: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto bg-white rounded-t-2xl shadow-2xl min-h-[calc(100vh-200px)]">
-      {/* Header */}
-      <div className="px-8 pt-12 pb-8 border-b border-gray-100">
-        <div className="flex justify-between items-start gap-8">
-          <div>
-            <h2 className="text-4xl font-bold text-gray-900 mb-3 bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+    <div className="max-w-7xl mx-auto bg-white shadow-lg min-h-[calc(100vh-120px)]">
+      {/* Page Header */}
+      <div className="px-8 pt-8 pb-6 border-b border-gray-100">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h2 className="text-2xl font-bold text-gray-900">
               Learning Sessions
             </h2>
-            <p className="text-xl text-gray-600 font-light">
+            <div className="w-px h-6 bg-gray-300"></div>
+            <p className="text-gray-600">
               Create and manage your prompt evolution sessions
             </p>
           </div>

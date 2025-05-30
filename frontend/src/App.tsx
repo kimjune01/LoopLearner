@@ -37,50 +37,34 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={
-          <div className="min-h-screen bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-700">
-            {/* Hero Header */}
-            <div className="relative overflow-hidden">
-              {/* Background Pattern */}
-              <div className="absolute inset-0 bg-black/10"></div>
-              <div className="absolute inset-0 opacity-30">
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent transform -skew-y-12"></div>
-              </div>
-              
-              {/* Floating Elements */}
-              <div 
-                className="absolute top-20 left-10 w-24 h-24 bg-white/10 rounded-full animate-float"
-                style={{ animationDelay: '0s' }}
-              ></div>
-              <div 
-                className="absolute top-40 right-20 w-16 h-16 bg-white/5 rounded-full animate-float"
-                style={{ animationDelay: '-2s' }}
-              ></div>
-              <div 
-                className="absolute bottom-20 left-1/4 w-20 h-20 bg-white/5 rounded-full animate-float"
-                style={{ animationDelay: '-4s' }}
-              ></div>
-              
-              {/* Header Content */}
-              <div className="relative z-10 text-center py-16 px-8">
-                <h1 className="text-6xl font-extrabold text-white mb-4 tracking-tight drop-shadow-lg">
-                  Loop Learner
-                </h1>
-                <p className="text-xl text-white/90 font-light mb-8 max-w-2xl mx-auto leading-relaxed">
-                  Human-in-the-loop machine learning system for adaptive prompt evolution
-                </p>
-                
-                {/* Status Indicator */}
-                <div className="inline-flex items-center gap-3 bg-white/15 backdrop-blur-sm px-6 py-3 rounded-full border border-white/20 shadow-lg">
-                  <span className="text-white/80 font-medium">Backend Status:</span>
-                  <span className={getStatusStyles(backendStatus)}>
-                    {backendStatus}
-                  </span>
+          <div className="min-h-screen bg-gray-50">
+            {/* Compact Header */}
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 shadow-lg">
+              <div className="max-w-7xl mx-auto px-8 py-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <h1 className="text-2xl font-bold text-white">
+                      Loop Learner
+                    </h1>
+                    <div className="hidden sm:block w-px h-6 bg-white/30"></div>
+                    <p className="hidden sm:block text-white/90 text-sm">
+                      Human-in-the-loop machine learning system
+                    </p>
+                  </div>
+                  
+                  {/* Status Indicator */}
+                  <div className="flex items-center gap-3 bg-white/15 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
+                    <span className="text-white/80 text-sm font-medium">Backend:</span>
+                    <span className={getStatusStyles(backendStatus)}>
+                      {backendStatus}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
             
             {/* Main Content */}
-            <div className="relative -mt-4 z-20">
+            <div className="pt-0">
               <SessionCollection />
             </div>
           </div>

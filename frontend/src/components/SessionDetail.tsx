@@ -31,49 +31,11 @@ export const SessionDetail: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-700 flex items-center justify-center">
-        <div className="flex items-center gap-3 text-white">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-          <span className="text-lg">Loading session...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !session) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-700 flex items-center justify-center">
-        <div className="max-w-md mx-auto text-center text-white">
-          <div className="w-16 h-16 mx-auto mb-4 bg-white/20 rounded-full flex items-center justify-center">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold mb-2">Session Not Found</h2>
-          <p className="text-white/80 mb-6">{error || 'The requested session could not be found.'}</p>
-          <Link 
-            to="/" 
-            className="inline-flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Back to Sessions
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-700">
-      {/* Header */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative z-10 px-8 py-12">
-          <div className="max-w-7xl mx-auto">
-            {/* Navigation */}
-            <div className="mb-8">
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 shadow-lg">
+          <div className="max-w-7xl mx-auto px-8 py-6">
+            <div className="flex items-center gap-4">
               <Link 
                 to="/" 
                 className="inline-flex items-center gap-2 text-white/80 hover:text-white transition-colors duration-200"
@@ -83,30 +45,103 @@ export const SessionDetail: React.FC = () => {
                 </svg>
                 Back to Sessions
               </Link>
+              <div className="w-px h-6 bg-white/30"></div>
+              <h1 className="text-2xl font-bold text-white">Loading...</h1>
             </div>
+          </div>
+        </div>
+        
+        {/* Loading Content */}
+        <div className="flex items-center justify-center min-h-[calc(100vh-120px)]">
+          <div className="flex items-center gap-3 text-gray-600">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+            <span className="text-lg">Loading session...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-            {/* Session Header */}
-            <div className="text-center">
-              <h1 className="text-5xl font-extrabold text-white mb-4 tracking-tight drop-shadow-lg">
+  if (error || !session) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 shadow-lg">
+          <div className="max-w-7xl mx-auto px-8 py-6">
+            <div className="flex items-center gap-4">
+              <Link 
+                to="/" 
+                className="inline-flex items-center gap-2 text-white/80 hover:text-white transition-colors duration-200"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Back to Sessions
+              </Link>
+              <div className="w-px h-6 bg-white/30"></div>
+              <h1 className="text-2xl font-bold text-white">Session Not Found</h1>
+            </div>
+          </div>
+        </div>
+        
+        {/* Error Content */}
+        <div className="flex items-center justify-center min-h-[calc(100vh-120px)]">
+          <div className="max-w-md mx-auto text-center">
+            <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Session Not Found</h2>
+            <p className="text-gray-600 mb-6">{error || 'The requested session could not be found.'}</p>
+            <Link 
+              to="/" 
+              className="btn-primary"
+            >
+              Back to Sessions
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Compact Header */}
+      <div className="bg-gradient-to-r from-purple-600 to-indigo-600 shadow-lg">
+        <div className="max-w-7xl mx-auto px-8 py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link 
+                to="/" 
+                className="inline-flex items-center gap-2 text-white/80 hover:text-white transition-colors duration-200"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Back to Sessions
+              </Link>
+              <div className="w-px h-6 bg-white/30"></div>
+              <h1 className="text-2xl font-bold text-white">
                 {session.name}
               </h1>
               {session.description && (
-                <p className="text-xl text-white/90 font-light mb-8 max-w-3xl mx-auto leading-relaxed">
-                  {session.description}
-                </p>
+                <>
+                  <div className="hidden sm:block w-px h-6 bg-white/30"></div>
+                  <p className="hidden sm:block text-white/90 text-sm max-w-md truncate">
+                    {session.description}
+                  </p>
+                </>
               )}
-              
-              {/* Session Status */}
-              <div className="inline-flex items-center gap-4 bg-white/15 backdrop-blur-sm px-6 py-3 rounded-full border border-white/20 shadow-lg">
-                <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${session.is_active ? 'bg-green-400' : 'bg-gray-400'}`}></div>
-                  <span className="text-white/80 font-medium">
-                    {session.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                <div className="w-px h-4 bg-white/30"></div>
-                <span className="text-white/80 font-medium">
-                  ID: {session.id}
+            </div>
+            
+            {/* Session Status */}
+            <div className="flex items-center gap-3 bg-white/15 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${session.is_active ? 'bg-green-400' : 'bg-gray-400'}`}></div>
+                <span className="text-white/80 text-sm font-medium">
+                  {session.is_active ? 'Active' : 'Inactive'}
                 </span>
               </div>
             </div>
@@ -115,8 +150,8 @@ export const SessionDetail: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className="relative -mt-4 z-20">
-        <div className="max-w-7xl mx-auto bg-white rounded-t-2xl shadow-2xl min-h-[calc(100vh-300px)]">
+      <div className="pt-0">
+        <div className="max-w-7xl mx-auto bg-white shadow-lg min-h-[calc(100vh-120px)]">
           <div className="p-8">
             {/* Current System Prompt - Most Prominent Section */}
             <div className="mb-12">
