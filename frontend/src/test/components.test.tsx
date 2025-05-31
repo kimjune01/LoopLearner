@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
@@ -7,7 +7,7 @@ import { EmailGenerator } from '../components/EmailGenerator';
 import { DraftViewer } from '../components/DraftViewer';
 import { ProgressDashboard } from '../components/ProgressDashboard';
 import { StateExporter } from '../components/StateExporter';
-import { EmailDraft } from '../types/email';
+import type { EmailDraft } from '../types/email';
 
 // Mock services
 vi.mock('../services/emailService', () => ({

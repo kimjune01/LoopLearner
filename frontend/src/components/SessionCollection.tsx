@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import type { Session } from '../types/session';
 import { sessionService } from '../services/sessionService';
 import { SessionCreator } from './SessionCreator';
 import { SessionCard } from './SessionCard';
+import ExportDialog from './ExportDialog';
 
 export const SessionCollection: React.FC = () => {
   const navigate = useNavigate();
@@ -14,6 +15,7 @@ export const SessionCollection: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'created_at' | 'updated_at' | 'name'>('updated_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [exportDialog, setExportDialog] = useState<{ open: boolean; session: Session | null }>({ open: false, session: null });
 
   const loadSessions = async () => {
     try {
@@ -79,23 +81,10 @@ export const SessionCollection: React.FC = () => {
     }
   };
 
-  const handleExportSession = async (sessionId: string) => {
-    try {
-      const exportData = await sessionService.exportSession(sessionId);
-      
-      // Create and download JSON file
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `session-${sessionId}-export.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Error exporting session:', err);
-      setError('Failed to export session');
+  const handleExportSession = (sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (session) {
+      setExportDialog({ open: true, session });
     }
   };
 
@@ -266,13 +255,42 @@ export const SessionCollection: React.FC = () => {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Modals */}
       {showCreateForm && (
         <SessionCreator
           onCancel={() => setShowCreateForm(false)}
           onSubmit={handleCreateSession}
         />
       )}
+      
+      <ExportDialog
+        isOpen={exportDialog.open}
+        onClose={() => setExportDialog({ open: false, session: null })}
+        exportType="session"
+        session={exportDialog.session || undefined}
+      />
+
+      {/* Footer */}
+      <footer className="border-t bg-gray-50 py-8 mt-16">
+        <div className="max-w-7xl mx-auto px-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="text-sm text-gray-600">
+              Powered by cutting-edge 2025 prompt optimization research
+            </div>
+            <div className="flex items-center gap-6">
+              <Link 
+                to="/about" 
+                className="text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors"
+              >
+                Learn about the technology →
+              </Link>
+              <div className="text-xs text-gray-400">
+                Version 1.0 • Open Source
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

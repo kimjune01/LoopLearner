@@ -484,6 +484,196 @@ class OpenAIProvider(BaseLLMProvider):
         return log_probs
 
 
+class AnthropicProvider(BaseLLMProvider):
+    """Anthropic Claude provider"""
+    
+    def __init__(self, config: LLMConfig):
+        super().__init__(config)
+        try:
+            import anthropic
+            self.client = anthropic.AsyncAnthropic(
+                api_key=config.api_key,
+                base_url=config.base_url
+            )
+        except ImportError:
+            raise ImportError("anthropic package required for Anthropic provider. Install with: pip install anthropic")
+    
+    async def generate(
+        self, 
+        prompt: str, 
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        system_prompt: Optional[str] = None
+    ) -> str:
+        """Generate text using Claude"""
+        try:
+            temp = temperature if temperature is not None else self.config.temperature
+            tokens = max_tokens if max_tokens is not None else self.config.max_tokens
+            
+            # Claude uses messages format
+            messages = [{"role": "user", "content": prompt}]
+            
+            kwargs = {
+                "model": self.config.model,
+                "messages": messages,
+                "temperature": temp,
+                "max_tokens": tokens
+            }
+            
+            # Add system prompt if provided
+            if system_prompt:
+                kwargs["system"] = system_prompt
+            
+            response = await self.client.messages.create(**kwargs)
+            
+            # Extract text from response
+            if response.content and len(response.content) > 0:
+                return response.content[0].text
+            else:
+                return ""
+                
+        except Exception as e:
+            raise Exception(f"Anthropic API error: {str(e)}")
+    
+    async def generate_drafts(
+        self, 
+        email_content: str, 
+        system_prompt: str, 
+        num_drafts: int = 3,
+        **kwargs
+    ) -> List[EmailDraft]:
+        """Generate email drafts using Claude"""
+        try:
+            prompt = f"""Please generate {num_drafts} different email draft responses to the following email:
+
+Email: {email_content}
+
+For each draft, provide:
+1. The email response content
+2. 3 reasoning factors explaining your approach
+3. A confidence score (0.0-1.0)
+
+Format your response as JSON with this structure:
+{{
+  "drafts": [
+    {{
+      "content": "email response text",
+      "reasoning": ["reason 1", "reason 2", "reason 3"],
+      "confidence": 0.85
+    }}
+  ]
+}}"""
+
+            response_text = await self.generate(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                temperature=kwargs.get('temperature', 0.7),
+                max_tokens=kwargs.get('max_tokens', 1000)
+            )
+            
+            # Parse JSON response
+            import json
+            try:
+                data = json.loads(response_text)
+                drafts = []
+                
+                for i, draft_data in enumerate(data.get('drafts', [])):
+                    draft = EmailDraft(
+                        content=draft_data.get('content', f'Draft {i+1} content'),
+                        reasoning=draft_data.get('reasoning', [f'Reasoning {i+1}']),
+                        confidence=draft_data.get('confidence', 0.7),
+                        draft_id=i+1,
+                        metadata={"provider": "anthropic", "model": self.config.model}
+                    )
+                    drafts.append(draft)
+                
+                return drafts
+                
+            except json.JSONDecodeError:
+                # Fallback: create basic drafts from text response
+                return [
+                    EmailDraft(
+                        content=response_text[:500],
+                        reasoning=["AI-generated response", "Professional tone", "Contextually appropriate"],
+                        confidence=0.7,
+                        draft_id=1,
+                        metadata={"provider": "anthropic", "model": self.config.model}
+                    )
+                ]
+                
+        except Exception as e:
+            # Return error draft
+            return [
+                EmailDraft(
+                    content=f"Error generating draft: {str(e)}",
+                    reasoning=["Error occurred", "Fallback response", "Manual review needed"],
+                    confidence=0.1,
+                    draft_id=1,
+                    metadata={"provider": "anthropic", "error": str(e)}
+                )
+            ]
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """Check Anthropic API health"""
+        try:
+            response = await self.client.messages.create(
+                model=self.config.model,
+                messages=[{"role": "user", "content": "Hello"}],
+                max_tokens=5
+            )
+            return {
+                "status": "healthy",
+                "provider": "anthropic",
+                "model": self.config.model,
+                "response_sample": response.content[0].text[:30] if response.content else ""
+            }
+        except Exception as e:
+            return {
+                "status": "unhealthy",
+                "provider": "anthropic",
+                "model": self.config.model,
+                "error": str(e)
+            }
+    
+    async def get_log_probabilities(
+        self,
+        text: str,
+        context: Optional[str] = None
+    ) -> List[float]:
+        """
+        Anthropic doesn't provide log probabilities directly.
+        Use estimated probabilities based on text characteristics.
+        """
+        return self._estimate_log_probabilities(text)
+    
+    def _estimate_log_probabilities(self, text: str) -> List[float]:
+        """Estimate log probabilities based on text characteristics"""
+        import re
+        import math
+        
+        words = text.split()
+        log_probs = []
+        
+        for word in words:
+            # Estimate likelihood based on word characteristics
+            if len(word) <= 3:
+                likelihood = 0.8  # Short words are common
+            elif word.lower() in ['the', 'and', 'to', 'of', 'a', 'in', 'is', 'it', 'you', 'that', 'he', 'was', 'for', 'on', 'are', 'as', 'with', 'his', 'they', 'at']:
+                likelihood = 0.9  # Common words
+            elif re.match(r'^[A-Z][a-z]+$', word):
+                likelihood = 0.3  # Proper nouns are less predictable
+            elif word.isdigit():
+                likelihood = 0.4  # Numbers are somewhat predictable
+            else:
+                likelihood = 0.6  # Default likelihood
+            
+            # Convert to log probability
+            log_prob = math.log(max(likelihood, 0.001))
+            log_probs.append(log_prob)
+        
+        return log_probs
+
+
 class MockProvider(BaseLLMProvider):
     """Mock provider for testing"""
     
@@ -542,6 +732,8 @@ class LLMProviderFactory:
         providers = {
             "ollama": OllamaProvider,
             "openai": OpenAIProvider,
+            "anthropic": AnthropicProvider,
+            "claude": AnthropicProvider,  # Alias for anthropic
             "mock": MockProvider
         }
         
@@ -555,9 +747,22 @@ class LLMProviderFactory:
     def from_environment() -> BaseLLMProvider:
         """Create provider from environment variables"""
         
+        provider = os.getenv("LLM_PROVIDER", "ollama")
+        
+        # Set default model based on provider
+        default_models = {
+            "ollama": "llama3.2:3b",
+            "openai": "gpt-3.5-turbo",
+            "anthropic": "claude-3-haiku-20240307",
+            "claude": "claude-3-haiku-20240307",
+            "mock": "mock-model"
+        }
+        
+        default_model = default_models.get(provider.lower(), "llama3.2:3b")
+        
         config = LLMConfig(
-            provider=os.getenv("LLM_PROVIDER", "ollama"),
-            model=os.getenv("LLM_MODEL", "llama3.2:3b"),
+            provider=provider,
+            model=os.getenv("LLM_MODEL", default_model),
             api_key=os.getenv("LLM_API_KEY"),
             base_url=os.getenv("LLM_BASE_URL"),
             temperature=float(os.getenv("LLM_TEMPERATURE", "0.7")),

@@ -61,6 +61,9 @@ def mock_feedback_batch():
         feedback.draft = MagicMock()
         feedback.draft.email = MagicMock()
         feedback.draft.email.scenario_type = 'professional'
+        # Add proper session mock with UUID
+        feedback.draft.email.session = MagicMock()
+        feedback.draft.email.session.id = '12345678-1234-5678-9012-123456789012'
         feedback_list.append(feedback)
     return feedback_list
 
@@ -232,8 +235,11 @@ class TestOptimizationOrchestrator:
     @pytest.mark.asyncio
     async def test_execute_optimization_cycle(self, orchestrator, mock_system_prompt, mock_feedback_batch):
         # Mock dependencies
-        with patch('app.services.optimization_orchestrator.sync_to_async') as mock_sync:
+        with patch('app.services.optimization_orchestrator.sync_to_async') as mock_sync, \
+             patch.object(orchestrator, '_check_cold_start_status', return_value=True), \
+             patch('app.services.optimization_orchestrator.SystemPrompt') as mock_prompt_model:
             mock_sync.return_value = AsyncMock(return_value=mock_system_prompt)
+            mock_prompt_model.objects.filter.return_value.first.return_value = mock_system_prompt
             
             # Mock prompt rewriter
             mock_candidate = RewriteCandidate(
@@ -349,6 +355,7 @@ class TestOptimizationOrchestrator:
                 assert mock_system_prompt.is_active == False
 
     @pytest.mark.asyncio
+    @pytest.mark.django_db
     async def test_get_optimization_status(self, orchestrator):
         status = await orchestrator.get_optimization_status()
         

@@ -33,9 +33,37 @@ class SystemPrompt(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     is_active = models.BooleanField(default=False)
     performance_score = models.FloatField(null=True, blank=True)
+    parameters = models.JSONField(default=list, blank=True)  # List of parameter names found in content
     
     class Meta:
         ordering = ['-version']
+    
+    def extract_parameters(self):
+        """Extract parameter names from content and update the parameters field"""
+        import re
+        if not self.content:
+            self.parameters = []
+            return []
+        
+        # Find all parameters in exactly double curly braces (not triple or more)
+        # Use negative lookbehind and lookahead to avoid matching nested braces
+        parameter_regex = r'(?<!\{)\{\{([^{}]+)\}\}(?!\})'
+        matches = re.findall(parameter_regex, self.content)
+        
+        # Clean up parameter names and remove duplicates
+        parameters = []
+        for match in matches:
+            param = match.strip()
+            if param and param not in parameters:
+                parameters.append(param)
+        
+        self.parameters = parameters
+        return parameters
+    
+    def save(self, *args, **kwargs):
+        """Override save to automatically extract parameters"""
+        self.extract_parameters()
+        super().save(*args, **kwargs)
     
     def __str__(self):
         if self.session:
@@ -91,6 +119,13 @@ class DraftReason(models.Model):
     text = models.TextField()
     confidence = models.FloatField()
     created_at = models.DateTimeField(default=timezone.now)
+    
+    def clean(self):
+        """Validate confidence is between 0 and 1"""
+        from django.core.exceptions import ValidationError
+        if self.confidence is not None:
+            if self.confidence < 0 or self.confidence > 1:
+                raise ValidationError('Confidence must be between 0 and 1')
     
     def __str__(self):
         return f"{self.text[:50]} ({self.confidence})"
@@ -175,3 +210,174 @@ class OptimizationRun(models.Model):
     
     def __str__(self):
         return f"Optimization: v{self.old_prompt.version} -> v{getattr(self.new_prompt, 'version', '?')} ({self.status})"
+
+
+class EvaluationDataset(models.Model):
+    """Simple evaluation dataset - just name and description for now"""
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='evaluation_datasets', null=True, blank=True)
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    parameters = models.JSONField(default=list, blank=True)  # List of parameter names
+    parameter_descriptions = models.JSONField(default=dict, blank=True)  # Parameter descriptions
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.name} ({self.session.name if self.session else 'Global'})"
+
+
+class EvaluationCase(models.Model):
+    """Individual test case - input, expected output, that's it"""
+    dataset = models.ForeignKey(EvaluationDataset, on_delete=models.CASCADE, related_name='cases')
+    input_text = models.TextField()  # The input to test against the prompt
+    expected_output = models.TextField()  # What we expect the prompt to generate
+    context = models.JSONField(default=dict, blank=True)  # Optional extra data
+    created_at = models.DateTimeField(default=timezone.now)
+    
+    def __str__(self):
+        return f"Case {self.id}: {self.input_text[:50]}..."
+
+
+class EvaluationRun(models.Model):
+    """Track when we run evaluations"""
+    dataset = models.ForeignKey(EvaluationDataset, on_delete=models.CASCADE)
+    prompt = models.ForeignKey(SystemPrompt, on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, default='pending')  # pending, running, completed, failed
+    overall_score = models.FloatField(null=True, blank=True)  # 0.0 to 1.0
+    started_at = models.DateTimeField(default=timezone.now)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"Eval {self.id}: {self.prompt} on {self.dataset}"
+
+
+class EvaluationResult(models.Model):
+    """Results for individual test cases"""
+    run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name='results')
+    case = models.ForeignKey(EvaluationCase, on_delete=models.CASCADE)
+    generated_output = models.TextField()  # What the prompt actually generated
+    similarity_score = models.FloatField()  # 0.0 to 1.0
+    passed = models.BooleanField()  # True if score above threshold
+    details = models.JSONField(default=dict, blank=True)  # Extra debugging info
+    
+    def __str__(self):
+        return f"Result {self.id}: {self.similarity_score:.2f} ({'PASS' if self.passed else 'FAIL'})"
+
+
+class SessionConfidence(models.Model):
+    """Track confidence metrics for learning sessions"""
+    
+    # Threshold constants for determining when learning is sufficient
+    USER_CONFIDENCE_THRESHOLD = 0.75
+    SYSTEM_CONFIDENCE_THRESHOLD = 0.75  
+    COMBINED_CONFIDENCE_THRESHOLD = 0.80
+    
+    session = models.OneToOneField(Session, on_delete=models.CASCADE, related_name='confidence_tracker')
+    
+    # Core confidence metrics (0.0 to 1.0)
+    user_confidence = models.FloatField(default=0.0)  # How confident user is in their feedback
+    system_confidence = models.FloatField(default=0.0)  # How confident system is in understanding user
+    confidence_trend = models.FloatField(default=0.0)  # Rate of confidence change
+    
+    # Detailed breakdown metrics
+    feedback_consistency_score = models.FloatField(default=0.0)  # Consistency of user feedback patterns
+    reasoning_alignment_score = models.FloatField(default=0.0)  # How well reasoning aligns with user preferences
+    total_feedback_count = models.IntegerField(default=0)  # Total feedback received
+    consistent_feedback_streak = models.IntegerField(default=0)  # Current streak of consistent feedback
+    
+    # Tracking metadata
+    last_calculated = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    
+    class Meta:
+        ordering = ['-last_calculated']
+    
+    def clean(self):
+        """Validate confidence values are between 0 and 1"""
+        from django.core.exceptions import ValidationError
+        
+        fields_to_validate = [
+            ('user_confidence', self.user_confidence),
+            ('system_confidence', self.system_confidence), 
+            ('feedback_consistency_score', self.feedback_consistency_score),
+            ('reasoning_alignment_score', self.reasoning_alignment_score)
+        ]
+        
+        for field_name, value in fields_to_validate:
+            if value is not None:
+                if value < 0 or value > 1:
+                    raise ValidationError(f'{field_name} must be between 0 and 1')
+    
+    def save(self, *args, **kwargs):
+        """Override save to validate confidence values"""
+        self.full_clean()
+        super().save(*args, **kwargs)
+    
+    def is_user_confidence_sufficient(self):
+        """Check if user confidence meets threshold"""
+        return self.user_confidence >= self.USER_CONFIDENCE_THRESHOLD
+    
+    def is_system_confidence_sufficient(self):
+        """Check if system confidence meets threshold"""
+        return self.system_confidence >= self.SYSTEM_CONFIDENCE_THRESHOLD
+    
+    def is_learning_sufficient(self):
+        """Check if both confidence metrics meet thresholds"""
+        combined_confidence = (self.user_confidence + self.system_confidence) / 2
+        return (self.is_user_confidence_sufficient() and 
+                self.is_system_confidence_sufficient() and
+                combined_confidence >= self.COMBINED_CONFIDENCE_THRESHOLD)
+    
+    def should_continue_learning(self):
+        """Determine if system should continue learning"""
+        return not self.is_learning_sufficient()
+    
+    def __str__(self):
+        return f"{self.session.name} - U:{self.user_confidence:.2f} S:{self.system_confidence:.2f}"
+
+
+class ExtractedPreference(models.Model):
+    """Automatically extracted user preferences from feedback patterns"""
+    
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='extracted_preferences')
+    
+    # Source tracking
+    source_feedback_ids = models.JSONField(default=list)  # List of feedback IDs that led to this preference
+    
+    # Preference details
+    preference_category = models.CharField(max_length=100)  # e.g., 'tone', 'structure', 'length', 'vocabulary'
+    preference_text = models.TextField()  # Natural language description of the preference
+    confidence_score = models.FloatField()  # 0.0 to 1.0 - how confident we are in this preference
+    
+    # Extraction metadata
+    extraction_method = models.CharField(max_length=100)  # e.g., 'reasoning_pattern_analysis', 'feedback_text_analysis'
+    supporting_evidence = models.TextField()  # Description of evidence that supports this preference
+    
+    # Management fields
+    is_active = models.BooleanField(default=True)
+    auto_extracted = models.BooleanField(default=True)  # True if automatically extracted, False if manually verified
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-confidence_score', '-updated_at']
+        indexes = [
+            models.Index(fields=['session', 'preference_category']),
+            models.Index(fields=['confidence_score']),
+        ]
+    
+    def clean(self):
+        """Validate confidence score is between 0 and 1"""
+        from django.core.exceptions import ValidationError
+        
+        if self.confidence_score is not None:
+            if self.confidence_score < 0 or self.confidence_score > 1:
+                raise ValidationError('confidence_score must be between 0 and 1')
+    
+    def save(self, *args, **kwargs):
+        """Override save to validate confidence score"""
+        self.full_clean()
+        super().save(*args, **kwargs)
+    
+    def __str__(self):
+        return f"{self.session.name} - {self.preference_category}: {self.preference_text[:50]}... ({self.confidence_score:.2f})"

@@ -518,5 +518,232 @@ class SessionPromptRelationshipTestCase(TestCase):
         self.assertFalse(Session.objects.filter(id=session_id).exists())
 
 
+class SessionPromptUpdateTestCase(TestCase):
+    """Test cases for session prompt update functionality"""
+    
+    def setUp(self):
+        """Set up test data"""
+        self.client = Client()
+        
+        # Create test session with initial prompt
+        self.session_with_prompt = Session.objects.create(
+            name="Session with Prompt",
+            description="Session that has an initial prompt"
+        )
+        
+        # Create system prompt for this session
+        self.system_prompt = SystemPrompt.objects.create(
+            session=self.session_with_prompt,
+            content="Initial test prompt",
+            version=1,
+            is_active=True
+        )
+        
+        # Create test session without prompt
+        self.session_without_prompt = Session.objects.create(
+            name="Session without Prompt",
+            description="Session that has no initial prompt"
+        )
+    
+    def test_update_existing_prompt_success(self):
+        """Test successfully updating an existing prompt"""
+        new_prompt_content = "Updated prompt content for testing"
+        
+        response = self.client.put(
+            f'/api/sessions/{self.session_with_prompt.id}/',
+            data=json.dumps({'initial_prompt': new_prompt_content}),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify session exists (no initial_prompt field to check)
+        updated_session = Session.objects.get(id=self.session_with_prompt.id)
+        
+        # Verify system prompt was updated
+        updated_system_prompt = SystemPrompt.objects.get(
+            session=self.session_with_prompt, 
+            is_active=True
+        )
+        self.assertEqual(updated_system_prompt.content, new_prompt_content)
+        self.assertEqual(updated_system_prompt.version, 1)  # Should still be version 1
+        self.assertTrue(updated_system_prompt.is_active)
+    
+    def test_create_new_prompt_for_session_without_prompt(self):
+        """Test creating a new prompt for a session that doesn't have one"""
+        new_prompt_content = "New prompt for session without prompt"
+        
+        response = self.client.put(
+            f'/api/sessions/{self.session_without_prompt.id}/',
+            data=json.dumps({'initial_prompt': new_prompt_content}),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify session exists (no initial_prompt field to check)
+        updated_session = Session.objects.get(id=self.session_without_prompt.id)
+        
+        # Verify system prompt was created
+        new_system_prompt = SystemPrompt.objects.get(
+            session=self.session_without_prompt,
+            is_active=True
+        )
+        self.assertEqual(new_system_prompt.content, new_prompt_content)
+        self.assertEqual(new_system_prompt.version, 1)
+        self.assertTrue(new_system_prompt.is_active)
+    
+    def test_clear_existing_prompt(self):
+        """Test clearing an existing prompt by setting it to empty string"""
+        response = self.client.put(
+            f'/api/sessions/{self.session_with_prompt.id}/',
+            data=json.dumps({'initial_prompt': ''}),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify session exists (no initial_prompt field to check)
+        updated_session = Session.objects.get(id=self.session_with_prompt.id)
+        
+        # Verify system prompt was deactivated
+        deactivated_prompt = SystemPrompt.objects.get(id=self.system_prompt.id)
+        self.assertFalse(deactivated_prompt.is_active)
+        
+        # Verify no active prompts exist for this session
+        active_prompts = SystemPrompt.objects.filter(
+            session=self.session_with_prompt,
+            is_active=True
+        )
+        self.assertEqual(active_prompts.count(), 0)
+    
+    def test_clear_prompt_with_whitespace(self):
+        """Test clearing prompt with whitespace-only content"""
+        response = self.client.put(
+            f'/api/sessions/{self.session_with_prompt.id}/',
+            data=json.dumps({'initial_prompt': '   \n\t   '}),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify session exists (no initial_prompt field to check)
+        updated_session = Session.objects.get(id=self.session_with_prompt.id)
+        
+        # Verify system prompt was deactivated
+        deactivated_prompt = SystemPrompt.objects.get(id=self.system_prompt.id)
+        self.assertFalse(deactivated_prompt.is_active)
+    
+    def test_update_prompt_with_other_fields(self):
+        """Test updating prompt along with other session fields"""
+        new_prompt_content = "Updated prompt with other fields"
+        new_name = "Updated Session Name"
+        new_description = "Updated session description"
+        
+        response = self.client.put(
+            f'/api/sessions/{self.session_with_prompt.id}/',
+            data=json.dumps({
+                'name': new_name,
+                'description': new_description,
+                'initial_prompt': new_prompt_content
+            }),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify all fields were updated
+        updated_session = Session.objects.get(id=self.session_with_prompt.id)
+        self.assertEqual(updated_session.name, new_name)
+        self.assertEqual(updated_session.description, new_description)
+        
+        # Verify system prompt was updated
+        updated_system_prompt = SystemPrompt.objects.get(
+            session=self.session_with_prompt,
+            is_active=True
+        )
+        self.assertEqual(updated_system_prompt.content, new_prompt_content)
+    
+    def test_update_prompt_nonexistent_session(self):
+        """Test updating prompt for a non-existent session"""
+        fake_session_id = uuid.uuid4()
+        
+        response = self.client.put(
+            f'/api/sessions/{fake_session_id}/',
+            data=json.dumps({'initial_prompt': 'Test prompt'}),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 404)
+    
+    def test_session_detail_includes_active_prompt(self):
+        """Test that session detail endpoint includes active prompt information"""
+        response = self.client.get(f'/api/sessions/{self.session_with_prompt.id}/')
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        
+        # Verify active_prompt information is included
+        self.assertIn('active_prompt', data)
+        active_prompt = data['active_prompt']
+        
+        self.assertEqual(active_prompt['content'], self.system_prompt.content)
+        self.assertEqual(active_prompt['version'], self.system_prompt.version)
+        self.assertIsNotNone(active_prompt['id'])
+    
+    def test_session_detail_no_active_prompt(self):
+        """Test session detail endpoint for session without active prompt"""
+        response = self.client.get(f'/api/sessions/{self.session_without_prompt.id}/')
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        
+        # Verify active_prompt information shows null values
+        self.assertIn('active_prompt', data)
+        active_prompt = data['active_prompt']
+        
+        self.assertIsNone(active_prompt['content'])
+        self.assertIsNone(active_prompt['version'])
+        self.assertIsNone(active_prompt['id'])
+    
+    def test_prompt_update_preserves_related_data(self):
+        """Test that updating prompt doesn't affect other session data"""
+        # Create related data
+        email = Email.objects.create(
+            session=self.session_with_prompt,
+            subject="Test Email",
+            body="Test email body",
+            sender="test@example.com"
+        )
+        
+        preference = UserPreference.objects.create(
+            session=self.session_with_prompt,
+            key="test_key", 
+            value="test_value"
+        )
+        
+        # Update prompt
+        new_prompt_content = "Updated prompt - should not affect related data"
+        response = self.client.put(
+            f'/api/sessions/{self.session_with_prompt.id}/',
+            data=json.dumps({'initial_prompt': new_prompt_content}),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify related data is preserved
+        self.assertTrue(Email.objects.filter(id=email.id).exists())
+        self.assertTrue(UserPreference.objects.filter(id=preference.id).exists())
+        
+        # Verify prompt was updated
+        updated_session = Session.objects.get(id=self.session_with_prompt.id)
+        updated_system_prompt = SystemPrompt.objects.get(
+            session=self.session_with_prompt,
+            is_active=True
+        )
+        self.assertEqual(updated_system_prompt.content, new_prompt_content)
+
+
 if __name__ == '__main__':
     pytest.main([__file__])

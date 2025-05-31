@@ -6,7 +6,10 @@ Implements A/B testing and batch evaluation for prompt optimization
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
-from core.models import SystemPrompt, Email, Draft, UserFeedback
+from core.models import (
+    SystemPrompt, Email, Draft, UserFeedback,
+    EvaluationDataset, EvaluationCase, EvaluationRun, EvaluationResult as DBEvaluationResult
+)
 from .reward_aggregator import RewardFunctionAggregator
 from .unified_llm_provider import BaseLLMProvider
 from asgiref.sync import sync_to_async
@@ -580,3 +583,203 @@ class EvaluationEngine:
         logger.info(f"Best prompt: v{best_prompt.version} with score {best_score:.3f}")
         
         return best_prompt, best_result
+    
+    # Dataset-based evaluation methods
+    
+    def create_evaluation_run(self, dataset: EvaluationDataset, prompt: SystemPrompt) -> EvaluationRun:
+        """Create a new evaluation run for a dataset and prompt."""
+        run = EvaluationRun.objects.create(
+            dataset=dataset,
+            prompt=prompt,
+            status='pending',
+            started_at=timezone.now()
+        )
+        logger.info(f"Created evaluation run {run.id} for dataset '{dataset.name}' and prompt v{prompt.version}")
+        return run
+    
+    def execute_evaluation_run(self, run: EvaluationRun) -> List[DBEvaluationResult]:
+        """Execute an evaluation run synchronously."""
+        try:
+            run.status = 'running'
+            run.save()
+            
+            # Get all cases for the dataset
+            cases = list(run.dataset.cases.all())
+            if not cases:
+                raise ValueError(f"No evaluation cases found for dataset {run.dataset.name}")
+            
+            results = []
+            scores = []
+            
+            for case in cases:
+                try:
+                    # Generate response for this case
+                    response = self._generate_response_for_case(run.prompt, case)
+                    
+                    # Calculate similarity score
+                    similarity = self._calculate_similarity_score(response, case.expected_output)
+                    
+                    # Determine if passed (using 0.7 as threshold)
+                    passed = similarity >= 0.7
+                    
+                    # Create result
+                    result = DBEvaluationResult.objects.create(
+                        run=run,
+                        case=case,
+                        generated_output=response,
+                        similarity_score=similarity,
+                        passed=passed,
+                        details={
+                            'prompt_version': run.prompt.version,
+                            'case_input': case.input_text,
+                            'response_length': len(response)
+                        }
+                    )
+                    
+                    results.append(result)
+                    scores.append(similarity)
+                    
+                except Exception as e:
+                    logger.error(f"Error evaluating case {case.id}: {str(e)}")
+                    # Create failed result
+                    result = DBEvaluationResult.objects.create(
+                        run=run,
+                        case=case,
+                        generated_output="",
+                        similarity_score=0.0,
+                        passed=False,
+                        details={'error': str(e)}
+                    )
+                    results.append(result)
+                    scores.append(0.0)
+            
+            # Calculate overall score
+            overall_score = sum(scores) / len(scores) if scores else 0.0
+            
+            # Update run
+            run.status = 'completed'
+            run.overall_score = overall_score
+            run.completed_at = timezone.now()
+            run.save()
+            
+            logger.info(f"Completed evaluation run {run.id} with overall score {overall_score:.3f}")
+            return results
+            
+        except Exception as e:
+            run.status = 'failed'
+            run.completed_at = timezone.now()
+            run.save()
+            logger.error(f"Failed evaluation run {run.id}: {str(e)}")
+            raise
+    
+    def _generate_response_for_case(self, prompt: SystemPrompt, case: EvaluationCase) -> str:
+        """Generate a response for an evaluation case."""
+        from .unified_llm_provider import LLMProviderFactory, LLMConfig
+        
+        # Use mock provider for testing, or configure from environment
+        provider = LLMProviderFactory.create_provider(LLMConfig(
+            provider="mock",
+            model="test-model"
+        ))
+        
+        # Substitute parameters in prompt content
+        prompt_content = prompt.content
+        if case.context:
+            for key, value in case.context.items():
+                placeholder = "{{" + key + "}}"
+                prompt_content = prompt_content.replace(placeholder, str(value))
+        
+        # Generate response
+        try:
+            response = provider.generate_text(
+                prompt=case.input_text,
+                system_prompt=prompt_content,
+                temperature=0.7,
+                max_tokens=300
+            )
+            return response.strip()
+        except Exception as e:
+            logger.error(f"LLM generation failed: {str(e)}")
+            return f"Error generating response: {str(e)}"
+    
+    def _calculate_similarity_score(self, generated: str, expected: str) -> float:
+        """Calculate similarity score between generated and expected output."""
+        if not generated or not expected:
+            return 0.0
+        
+        # Simple similarity based on common words
+        # In production, you'd use more sophisticated similarity measures
+        generated_words = set(generated.lower().split())
+        expected_words = set(expected.lower().split())
+        
+        if not expected_words:
+            return 0.0
+        
+        # Jaccard similarity
+        intersection = len(generated_words & expected_words)
+        union = len(generated_words | expected_words)
+        
+        if union == 0:
+            return 0.0
+        
+        jaccard_score = intersection / union
+        
+        # Also consider length similarity
+        length_ratio = min(len(generated), len(expected)) / max(len(generated), len(expected))
+        
+        # Combined score (weighted average)
+        return 0.7 * jaccard_score + 0.3 * length_ratio
+    
+    def compare_prompts(self, dataset: EvaluationDataset, prompts: List[SystemPrompt]) -> Dict[str, Any]:
+        """Compare multiple prompts on a dataset."""
+        if len(prompts) < 2:
+            raise ValueError("Need at least 2 prompts to compare")
+        
+        runs = []
+        
+        # Execute evaluation for each prompt
+        for prompt in prompts:
+            run = self.create_evaluation_run(dataset, prompt)
+            self.execute_evaluation_run(run)
+            runs.append(run)
+        
+        # Find the best performing run
+        best_run = max(runs, key=lambda r: r.overall_score)
+        
+        # Calculate improvement over baseline (first prompt)
+        baseline_score = runs[0].overall_score
+        best_score = best_run.overall_score
+        improvement = ((best_score - baseline_score) / baseline_score * 100) if baseline_score > 0 else 0
+        
+        # Determine winner
+        if best_run == runs[0]:
+            winner = 'baseline'
+        else:
+            winner = f'prompt_{prompts.index(best_run.prompt) + 1}'
+        
+        return {
+            'runs': [
+                {
+                    'run_id': run.id,
+                    'prompt_id': run.prompt.id,
+                    'score': run.overall_score,
+                    'passed_cases': run.results.filter(passed=True).count(),
+                    'total_cases': run.results.count()
+                }
+                for run in runs
+            ],
+            'winner': winner,
+            'improvement': improvement,
+            'best_score': best_score
+        }
+    
+    def evaluate_prompt_against_datasets(self, prompt: SystemPrompt, datasets: List[EvaluationDataset]) -> List[EvaluationRun]:
+        """Evaluate a single prompt against multiple datasets."""
+        runs = []
+        
+        for dataset in datasets:
+            run = self.create_evaluation_run(dataset, prompt)
+            self.execute_evaluation_run(run)
+            runs.append(run)
+        
+        return runs

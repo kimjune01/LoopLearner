@@ -61,7 +61,7 @@ class UserPreferenceSerializer(serializers.ModelSerializer):
 class SystemPromptSerializer(serializers.ModelSerializer):
     class Meta:
         model = SystemPrompt
-        fields = ['id', 'content', 'version', 'created_at', 'is_active', 'performance_score']
+        fields = ['id', 'content', 'version', 'created_at', 'is_active', 'performance_score', 'parameters']
 
 
 class EvaluationSnapshotSerializer(serializers.ModelSerializer):

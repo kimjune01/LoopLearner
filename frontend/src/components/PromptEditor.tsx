@@ -20,6 +20,19 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   const [prompt, setPrompt] = useState(initialPrompt);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Detect parameters in the prompt
+  const detectParameters = (text: string) => {
+    const parameterRegex = /(?<!\{)\{\{([^{}]+)\}\}(?!\})/g;
+    const parameters = [];
+    let match;
+    while ((match = parameterRegex.exec(text)) !== null) {
+      parameters.push(match[1].trim());
+    }
+    return [...new Set(parameters)]; // Remove duplicates
+  };
+
+  const parameters = detectParameters(prompt);
+
   const handleSave = async () => {
     if (!prompt.trim()) return;
     
@@ -120,11 +133,49 @@ Please respond thoughtfully and consider the context of each interaction.`;
             />
             
             <div className="flex items-center justify-between text-sm text-gray-500">
-              <span>{prompt.length} characters</span>
+              <div className="flex items-center gap-4">
+                <span>{prompt.length} characters</span>
+                {parameters.length > 0 && (
+                  <span className="text-purple-600">
+                    {parameters.length} parameter{parameters.length === 1 ? '' : 's'} detected
+                  </span>
+                )}
+              </div>
               {prompt.length > 1000 && (
                 <span className="text-orange-600">Long prompts may affect performance</span>
               )}
             </div>
+
+            {/* Parameters Section */}
+            {parameters.length > 0 && (
+              <div className="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    <svg className="w-5 h-5 text-purple-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-purple-900 mb-2">Detected Parameters</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {parameters.map((param, index) => (
+                        <span 
+                          key={index}
+                          className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-800 rounded-md border border-purple-200 font-mono text-sm"
+                        >
+                          <span className="text-purple-600 mr-1">{'{{'}</span>
+                          {param}
+                          <span className="text-purple-600 ml-1">{'}}'}</span>
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-sm text-purple-700 mt-2">
+                      Parameters will be highlighted when the prompt is saved. They can be used for dynamic content injection.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Tips */}
@@ -135,6 +186,7 @@ Please respond thoughtfully and consider the context of each interaction.`;
               <li>• Include context about the domain or use case</li>
               <li>• Set expectations for tone and communication style</li>
               <li>• Mention any constraints or guidelines to follow</li>
+              <li>• Use <code className="bg-blue-100 px-1 rounded text-blue-900">{'{{parameter_name}}'}</code> for dynamic content that can be filled in later</li>
             </ul>
           </div>
         </div>

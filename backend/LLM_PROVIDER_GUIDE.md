@@ -20,11 +20,11 @@ The Loop Learner system supports multiple LLM providers through a unified interf
 - **Pros**: Excellent quality, reliable, scalable
 - **Cons**: API costs, rate limits, requires internet
 
-### 3. Anthropic (Alternative Production) 🎯
-- **Best for**: Production alternative, excellent reasoning
-- **Models**: `claude-3-sonnet-20240229`, `claude-3-haiku-20240307`
+### 3. Anthropic Claude (Alternative Production) 🎯
+- **Best for**: Production alternative, excellent reasoning, evaluation tasks
+- **Models**: `claude-3-haiku-20240307`, `claude-3-sonnet-20240229`, `claude-3-opus-20240229`
 - **Setup**: Requires Anthropic API key
-- **Pros**: Strong reasoning, safety-focused, reliable
+- **Pros**: Strong reasoning, safety-focused, reliable, excellent for evaluation case generation
 - **Cons**: API costs, rate limits, requires internet
 
 ### 4. Mock (Testing) 🧪
@@ -39,7 +39,7 @@ The Loop Learner system supports multiple LLM providers through a unified interf
 
 ```bash
 # Provider Selection
-LLM_PROVIDER=ollama          # ollama, openai, anthropic, mock
+LLM_PROVIDER=ollama          # ollama, openai, anthropic, claude, mock
 
 # Model Configuration  
 LLM_MODEL=llama3.2:3b        # Provider-specific model name
@@ -70,6 +70,20 @@ LLM_MODEL=gpt-4
 LLM_API_KEY=sk-your-openai-key
 LLM_TEMPERATURE=0.5
 LLM_MAX_TOKENS=800
+```
+
+#### Production Alternative (Anthropic Claude)
+```bash
+# .env
+LLM_PROVIDER=anthropic       # or 'claude' as alias
+LLM_MODEL=claude-3-haiku-20240307
+LLM_API_KEY=sk-ant-your-anthropic-key
+LLM_TEMPERATURE=0.5
+LLM_MAX_TOKENS=800
+
+# Alternative models:
+# LLM_MODEL=claude-3-sonnet-20240229  # Better quality, higher cost
+# LLM_MODEL=claude-3-opus-20240229    # Best quality, highest cost
 ```
 
 #### Testing (Mock)

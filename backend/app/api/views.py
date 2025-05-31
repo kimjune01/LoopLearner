@@ -194,11 +194,33 @@ class SubmitFeedbackView(EmailAPIView):
             edited_content=edited_content
         )
         
+        # Handle reason ratings if provided
+        reason_ratings_data = data.get('reason_ratings', {})
+        reason_ratings_saved = 0
+        
+        if reason_ratings_data:
+            for reason_id_str, liked in reason_ratings_data.items():
+                try:
+                    reason_id = int(reason_id_str)
+                    reason = DraftReason.objects.get(id=reason_id)
+                    
+                    # Create the rating
+                    ReasonRating.objects.create(
+                        feedback=feedback,
+                        reason=reason,
+                        liked=bool(liked)
+                    )
+                    reason_ratings_saved += 1
+                except (ValueError, DraftReason.DoesNotExist):
+                    # Ignore invalid reason IDs as per test requirements
+                    continue
+        
         return Response({
             'feedback_id': feedback.id,
             'action': feedback.action,
             'processed': True,
-            'learning_signal_strength': 0.8
+            'learning_signal_strength': 0.8,
+            'reason_ratings_saved': reason_ratings_saved
         }, status=status.HTTP_201_CREATED)
 
 
@@ -333,60 +355,68 @@ class ImportSystemStateView(EmailAPIView):
     """Import system state from backup"""
     
     def post(self, request):
-        # Handle both JSON and form data
-        if hasattr(request, 'data'):
-            data = request.data
-        else:
-            # For form data, state_data might be a JSON string
-            data = request.POST.dict()
+        try:
+            # Handle both JSON and form data
+            if hasattr(request, 'data'):
+                data = request.data
+            else:
+                # For form data, state_data might be a JSON string
+                data = request.POST.dict()
+                
+            # The test sends the state data directly, not under a 'state_data' key
+            if 'state_data' in data:
+                state_data = data['state_data']
+            else:
+                # Assume the entire data is the state data
+                state_data = data
+                
+            import_options = data.get('options', {})
             
-        # The test sends the state data directly, not under a 'state_data' key
-        if 'state_data' in data:
-            state_data = data['state_data']
-        else:
-            # Assume the entire data is the state data
-            state_data = data
+            # If state_data is a string, try to parse it as JSON
+            if isinstance(state_data, str):
+                import json
+                try:
+                    state_data = json.loads(state_data)
+                except json.JSONDecodeError:
+                    return Response({'error': 'Invalid state_data format'}, status=status.HTTP_400_BAD_REQUEST)
             
-        import_options = data.get('options', {})
-        
-        # If state_data is a string, try to parse it as JSON
-        if isinstance(state_data, str):
-            import json
-            try:
-                state_data = json.loads(state_data)
-            except json.JSONDecodeError:
-                return Response({'error': 'Invalid state_data format'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        imported_items = []
-        
-        # Import current prompt if provided
-        if state_data and 'current_prompt' in state_data:
-            prompt_data = state_data['current_prompt']
-            prompt, created = SystemPrompt.objects.get_or_create(
-                version=prompt_data.get('version', 2),
-                defaults={'content': prompt_data.get('content', 'You are a helpful assistant.')}
-            )
-            imported_items.append('prompts')
-        
-        # Import user preferences if provided
-        if state_data and 'user_preferences' in state_data:
-            from core.models import UserPreference
-            for pref_data in state_data['user_preferences']:
-                UserPreference.objects.update_or_create(
-                    key=pref_data['key'],
-                    defaults={
-                        'value': pref_data['value'],
-                        'is_active': pref_data.get('is_active', True)
-                    }
-                )
-            imported_items.append('preferences')
-        
-        return Response({
-            'import_id': 'import_456',
-            'imported_items': imported_items,
-            'conflicts_resolved': [],
-            'warnings': []
-        }, status=status.HTTP_200_OK)
+            # Use the enhanced SystemImporter
+            from app.services.system_importer import SystemImporter
+            importer = SystemImporter()
+            
+            preserve_existing = import_options.get('preserve_existing', True)
+            result = importer.import_system_state(state_data, preserve_existing=preserve_existing)
+            
+            # Format response for backward compatibility
+            imported_items = []
+            if result['imported_global_preferences'] > 0:
+                imported_items.append('preferences')
+            if result['imported_sessions'] > 0:
+                imported_items.append('sessions')
+            
+            response_data = {
+                'import_id': f'import_{hash(str(state_data)) % 10000}',
+                'imported_items': imported_items,
+                'imported_sessions': result['imported_sessions'],
+                'imported_global_preferences': result['imported_global_preferences'],
+                'conflicts_resolved': [],
+                'warnings': result['warnings'],
+                'errors': result['errors']
+            }
+            
+            # Set appropriate status code
+            if result['errors']:
+                status_code = status.HTTP_207_MULTI_STATUS  # Partial success
+            else:
+                status_code = status.HTTP_200_OK
+                
+            return Response(response_data, status=status_code)
+            
+        except Exception as e:
+            logger.error(f"System import failed: {str(e)}")
+            return Response({
+                'error': f'System import failed: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class TriggerOptimizationView(EmailAPIView):
@@ -399,17 +429,66 @@ class TriggerOptimizationView(EmailAPIView):
         else:
             data = request.POST.dict()
             
-        optimization_type = data.get('type', 'conservative')  # conservative, exploratory, hybrid
-        target_metrics = data.get('target_metrics', ['f1_score', 'perplexity'])
+        session_id = data.get('session_id')
+        if not session_id:
+            return Response({'error': 'session_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Mock optimization trigger response
-        return Response({
-            'optimization_id': 'opt_789',
-            'type': optimization_type,
-            'target_metrics': target_metrics,
-            'status': 'started',
-            'estimated_duration': '5-10 minutes'
-        }, status=status.HTTP_202_ACCEPTED)
+        try:
+            # Get the session
+            session = Session.objects.get(id=session_id, is_active=True)
+        except Session.DoesNotExist:
+            return Response({'error': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if session has an active prompt
+        active_prompt = SystemPrompt.objects.filter(session=session, is_active=True).first()
+        if not active_prompt:
+            return Response({'error': 'No active prompt found for session'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get feedback for this session
+        feedback_list = UserFeedback.objects.filter(
+            draft__email__session=session
+        ).select_related('draft', 'draft__email').order_by('-created_at')
+        
+        if not feedback_list.exists():
+            return Response({'error': 'No feedback available for optimization'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Initialize the optimization orchestrator
+        from app.services.optimization_orchestrator import OptimizationOrchestrator
+        orchestrator = OptimizationOrchestrator()
+        
+        # Run optimization
+        try:
+            result = orchestrator.optimize_prompt(session, list(feedback_list))
+            
+            if result.success:
+                # Serialize the new prompt
+                new_prompt_data = {
+                    'id': result.new_prompt.id,
+                    'content': result.new_prompt.content,
+                    'version': result.new_prompt.version,
+                    'is_active': result.new_prompt.is_active,
+                    'created_at': result.new_prompt.created_at.isoformat()
+                }
+                
+                return Response({
+                    'status': 'success',
+                    'new_prompt': new_prompt_data,
+                    'improvement_percentage': result.improvement_percentage,
+                    'optimization_reason': result.optimization_reason,
+                    'feedback_analyzed': feedback_list.count()
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'status': 'failed',
+                    'error': result.error_message
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except Exception as e:
+            logger.error(f"Optimization failed: {str(e)}")
+            return Response({
+                'status': 'failed',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class GetOptimizationProgressView(EmailAPIView):

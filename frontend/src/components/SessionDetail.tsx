@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import type { Session } from '../types/session';
 import { sessionService } from '../services/sessionService';
 import { PromptEditor } from './PromptEditor';
+import SessionProgressVisualization from './SessionProgressVisualization';
 
 export const SessionDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -10,6 +11,47 @@ export const SessionDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [isPromptExpanded, setIsPromptExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<'prompt' | 'progress'>('prompt');
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  // Function to highlight parameters in prompt content
+  const highlightParameters = (text: string) => {
+    const parameterRegex = /(?<!\{)\{\{([^{}]+)\}\}(?!\})/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = parameterRegex.exec(text)) !== null) {
+      // Add text before the parameter
+      if (match.index > lastIndex) {
+        parts.push(text.slice(lastIndex, match.index));
+      }
+      
+      // Add the highlighted parameter
+      parts.push(
+        <span 
+          key={match.index}
+          className="inline-flex items-center px-2 py-1 mx-1 bg-purple-100 text-purple-800 rounded-md border border-purple-200 font-semibold text-sm"
+          title={`Parameter: ${match[1]}`}
+        >
+          <span className="text-purple-600 mr-1">{'{{'}</span>
+          {match[1]}
+          <span className="text-purple-600 ml-1">{'}}'}</span>
+        </span>
+      );
+      
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : text;
+  };
 
   const loadSession = async () => {
     if (!id) return;
@@ -31,6 +73,23 @@ export const SessionDetail: React.FC = () => {
     loadSession();
   }, [id]);
 
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+
+    if (showExportMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showExportMenu]);
+
   const handleSavePrompt = async (prompt: string) => {
     if (!session || !id) return;
     
@@ -39,7 +98,18 @@ export const SessionDetail: React.FC = () => {
       await sessionService.updateSessionPrompt(id, prompt);
       
       // Update local state immediately for responsive UI
-      setSession(prev => prev ? { ...prev, initial_prompt: prompt } : null);
+      setSession(prev => prev ? { 
+        ...prev, 
+        active_prompt: prev.active_prompt ? { 
+          ...prev.active_prompt, 
+          content: prompt 
+        } : {
+          id: null,
+          version: null,
+          content: prompt,
+          parameters: []
+        }
+      } : null);
       setShowPromptEditor(false);
       
       // Reload session to get fresh data from server
@@ -47,6 +117,110 @@ export const SessionDetail: React.FC = () => {
     } catch (err) {
       console.error('Error saving prompt:', err);
       setError('Failed to save prompt');
+    }
+  };
+
+  const handleExportPrompt = (format: 'json' | 'txt' | 'md') => {
+    if (!session?.active_prompt?.content) return;
+
+    const baseFilename = `${session.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_prompt_v${session.active_prompt.version}`;
+    let content: string;
+    let mimeType: string;
+    let extension: string;
+
+    switch (format) {
+      case 'json':
+        const exportData = {
+          session: {
+            id: session.id,
+            name: session.name,
+            description: session.description,
+            created_at: session.created_at,
+            updated_at: session.updated_at
+          },
+          prompt: {
+            id: session.active_prompt.id,
+            content: session.active_prompt.content,
+            version: session.active_prompt.version,
+            parameters: session.active_prompt.parameters || []
+          },
+          export_metadata: {
+            exported_at: new Date().toISOString(),
+            exported_by: 'LoopLearner Frontend',
+            format_version: '1.0'
+          }
+        };
+        content = JSON.stringify(exportData, null, 2);
+        mimeType = 'application/json';
+        extension = 'json';
+        break;
+
+      case 'txt':
+        content = `System Prompt for ${session.name}
+Version: ${session.active_prompt.version}
+Created: ${new Date(session.created_at).toLocaleDateString()}
+Updated: ${new Date(session.updated_at).toLocaleDateString()}
+
+${session.description ? `Description: ${session.description}\n\n` : ''}Parameters: ${(session.active_prompt.parameters || []).map(p => `{{${p}}}`).join(', ')}
+
+=== PROMPT CONTENT ===
+
+${session.active_prompt.content}
+
+=== END ===
+
+Exported from LoopLearner on ${new Date().toLocaleString()}`;
+        mimeType = 'text/plain';
+        extension = 'txt';
+        break;
+
+      case 'md':
+        content = `# System Prompt: ${session.name}
+
+**Version:** ${session.active_prompt.version}  
+**Created:** ${new Date(session.created_at).toLocaleDateString()}  
+**Updated:** ${new Date(session.updated_at).toLocaleDateString()}  
+
+${session.description ? `**Description:** ${session.description}\n\n` : ''}## Parameters
+
+${(session.active_prompt.parameters || []).length > 0 
+  ? (session.active_prompt.parameters || []).map(p => `- \`{{${p}}}\``).join('\n')
+  : 'No parameters detected'
+}
+
+## Prompt Content
+
+\`\`\`
+${session.active_prompt.content}
+\`\`\`
+
+---
+*Exported from LoopLearner on ${new Date().toLocaleString()}*`;
+        mimeType = 'text/markdown';
+        extension = 'md';
+        break;
+    }
+
+    // Create and download the file
+    const dataBlob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(dataBlob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${baseFilename}.${extension}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    setShowExportMenu(false);
+  };
+
+  const handleRunEvals = async () => {
+    // Scroll to the evaluation section where users can manage their evaluation datasets
+    const evaluationSection = document.querySelector('[data-section="evaluation"]');
+    if (evaluationSection) {
+      evaluationSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
@@ -170,12 +344,41 @@ export const SessionDetail: React.FC = () => {
         </div>
       </div>
 
+      {/* Tab Navigation */}
+      <div className="max-w-7xl mx-auto bg-white shadow-sm border-b">
+        <nav className="flex space-x-8 px-8">
+          <button
+            onClick={() => setActiveTab('prompt')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'prompt'
+                ? 'border-purple-500 text-purple-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            System Prompt
+          </button>
+          <button
+            onClick={() => setActiveTab('progress')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'progress'
+                ? 'border-purple-500 text-purple-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Learning Progress
+          </button>
+        </nav>
+      </div>
+
       {/* Main Content */}
       <div className="pt-0">
         <div className="max-w-7xl mx-auto bg-white shadow-lg min-h-[calc(100vh-120px)]">
           <div className="p-8">
-            {/* Current System Prompt - Most Prominent Section */}
-            <div className="mb-12">
+            {/* Tab Content */}
+            {activeTab === 'prompt' && (
+              <>
+                {/* Current System Prompt - Most Prominent Section */}
+                <div className="mb-12">
               <div className="text-center mb-8">
                 <h2 className="text-4xl font-bold text-gray-900 mb-3 bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
                   Current System Prompt
@@ -186,7 +389,7 @@ export const SessionDetail: React.FC = () => {
               </div>
               
               <div className="card-elevated p-8 mb-6">
-                {session.initial_prompt ? (
+                {session.active_prompt?.content ? (
                   <div className="space-y-6">
                     {/* Prompt Content */}
                     <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border-l-4 border-purple-500">
@@ -194,7 +397,7 @@ export const SessionDetail: React.FC = () => {
                         <div className="flex items-center gap-3">
                           <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
                           <span className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
-                            Active Prompt • Version 1
+                            Active Prompt • Version {session.active_prompt?.version || 1}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -205,16 +408,99 @@ export const SessionDetail: React.FC = () => {
                         </div>
                       </div>
                       
-                      <div className="text-lg leading-relaxed text-gray-800 font-medium">
-                        {session.initial_prompt}
+                      <div className="text-lg leading-relaxed text-gray-800 font-medium whitespace-pre-wrap">
+                        <div className={`relative transition-all duration-300 ${
+                          !isPromptExpanded ? 'max-h-screen overflow-hidden' : ''
+                        }`}>
+                          <div className={`${
+                            !isPromptExpanded 
+                              ? 'overflow-hidden' 
+                              : ''
+                          }`} style={{ 
+                            maxHeight: !isPromptExpanded ? '100vh' : 'none',
+                            maskImage: !isPromptExpanded ? 'linear-gradient(to bottom, black 85%, transparent 100%)' : 'none',
+                            WebkitMaskImage: !isPromptExpanded ? 'linear-gradient(to bottom, black 85%, transparent 100%)' : 'none'
+                          }}>
+                            {highlightParameters(session.active_prompt?.content || '')}
+                          </div>
+                          
+                          {/* Show More/Less Button */}
+                          {session.active_prompt?.content && session.active_prompt.content.split('\n').length > 20 && (
+                            <div className="mt-4 text-center">
+                              <button
+                                onClick={() => setIsPromptExpanded(!isPromptExpanded)}
+                                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition-colors duration-200"
+                              >
+                                {isPromptExpanded ? (
+                                  <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                    </svg>
+                                    Show Less
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                    Show More
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
+                      
+                      {/* Parameters Info */}
+                      {session.active_prompt?.parameters && session.active_prompt.parameters.length > 0 && (
+                        <div className="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0">
+                              <svg className="w-5 h-5 text-purple-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-purple-900 mb-2">
+                                Parameters ({session.active_prompt.parameters.length})
+                              </h4>
+                              <div className="flex flex-wrap gap-2">
+                                {session.active_prompt.parameters.map((param, index) => (
+                                  <span 
+                                    key={index}
+                                    className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-800 rounded-md border border-purple-200 font-mono text-sm"
+                                  >
+                                    <span className="text-purple-600 mr-1">{'{{'}</span>
+                                    {param}
+                                    <span className="text-purple-600 ml-1">{'}}'}</span>
+                                  </span>
+                                ))}
+                              </div>
+                              <p className="text-sm text-purple-700 mt-2">
+                                These parameters can be dynamically filled with values when the prompt is used.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     
                     {/* Prompt Actions */}
                     <div className="flex flex-wrap gap-3 justify-center">
                       <button 
+                        onClick={handleRunEvals}
+                        title="Scroll to evaluation section to manage evaluation datasets and test prompt performance"
+                        className="btn-primary flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Manage Evaluations
+                      </button>
+                      <button 
                         onClick={() => setShowPromptEditor(true)}
-                        className="btn-primary flex items-center gap-2"
+                        className="btn-secondary flex items-center gap-2"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -233,12 +519,61 @@ export const SessionDetail: React.FC = () => {
                         </svg>
                         Performance Metrics
                       </button>
-                      <button className="btn-secondary flex items-center gap-2">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                        </svg>
-                        Export Prompt
-                      </button>
+                      <div className="relative" ref={exportMenuRef}>
+                        <button 
+                          onClick={() => setShowExportMenu(!showExportMenu)}
+                          className="btn-secondary flex items-center gap-2"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                          </svg>
+                          Export Prompt
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                        
+                        {showExportMenu && (
+                          <div className="absolute top-full mt-2 right-0 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-48">
+                            <button
+                              onClick={() => handleExportPrompt('json')}
+                              className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3"
+                            >
+                              <div className="w-8 h-8 bg-blue-100 rounded flex items-center justify-center">
+                                <span className="text-blue-700 font-mono text-xs font-bold">{'{}'}</span>
+                              </div>
+                              <div>
+                                <div className="font-medium text-gray-900">JSON</div>
+                                <div className="text-sm text-gray-500">Structured data with metadata</div>
+                              </div>
+                            </button>
+                            <button
+                              onClick={() => handleExportPrompt('txt')}
+                              className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3"
+                            >
+                              <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center">
+                                <span className="text-gray-700 font-mono text-xs font-bold">TXT</span>
+                              </div>
+                              <div>
+                                <div className="font-medium text-gray-900">Plain Text</div>
+                                <div className="text-sm text-gray-500">Simple text format</div>
+                              </div>
+                            </button>
+                            <button
+                              onClick={() => handleExportPrompt('md')}
+                              className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3"
+                            >
+                              <div className="w-8 h-8 bg-purple-100 rounded flex items-center justify-center">
+                                <span className="text-purple-700 font-mono text-xs font-bold">MD</span>
+                              </div>
+                              <div>
+                                <div className="font-medium text-gray-900">Markdown</div>
+                                <div className="text-sm text-gray-500">Formatted documentation</div>
+                              </div>
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -379,50 +714,43 @@ export const SessionDetail: React.FC = () => {
               </div>
             </div>
 
-            {/* Learning Components Placeholder */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-              {/* Email Generation Section */}
-              <div className="card p-6">
-                <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                  Email Testing
-                </h3>
-                <div className="text-center py-8 text-gray-500">
-                  <div className="w-12 h-12 mx-auto mb-3 bg-indigo-100 rounded-full flex items-center justify-center">
-                    <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <p className="mb-4">Generate test emails to train your prompt</p>
-                  <button className="btn-primary">
-                    Generate Test Email
-                  </button>
-                </div>
-              </div>
-
-              {/* Learning Progress Section */}
-              <div className="card p-6">
-                <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                {/* Evaluation Section */}
+                <div className="mt-12" data-section="evaluation">
+              <div className="card-elevated p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                  Learning Analytics
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Evaluation Datasets
                 </h3>
-                <div className="text-center py-8 text-gray-500">
-                  <div className="w-12 h-12 mx-auto mb-3 bg-green-100 rounded-full flex items-center justify-center">
-                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                  </div>
-                  <p className="mb-4">Track prompt performance and evolution</p>
-                  <button className="btn-secondary">
-                    View Analytics
-                  </button>
-                </div>
+                <p className="text-gray-600 mb-4">
+                  Test your prompt performance against predefined evaluation datasets.
+                </p>
+                <Link 
+                  to="/evaluation/datasets"
+                  className="btn-primary inline-flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  View Evaluation Datasets
+                </Link>
               </div>
-            </div>
+                </div>
+              </>
+            )}
+
+            {/* Progress Tab Content */}
+            {activeTab === 'progress' && id && (
+              <SessionProgressVisualization 
+                sessionId={id}
+                onOptimizationTrigger={() => {
+                  // TODO: Integrate with optimization trigger
+                  console.log('Optimization triggered from progress view');
+                }}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -430,12 +758,12 @@ export const SessionDetail: React.FC = () => {
       {/* Prompt Editor Modal */}
       {showPromptEditor && (
         <PromptEditor
-          initialPrompt={session?.initial_prompt || ''}
+          initialPrompt={session?.active_prompt?.content || ''}
           sessionName={session?.name}
           sessionDescription={session?.description}
           onSave={handleSavePrompt}
           onCancel={() => setShowPromptEditor(false)}
-          isCreating={!session?.initial_prompt}
+          isCreating={!session?.active_prompt?.content}
         />
       )}
     </div>

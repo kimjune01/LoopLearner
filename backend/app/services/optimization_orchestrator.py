@@ -45,7 +45,7 @@ class OptimizationResult:
 
 
 class OptimizationOrchestrator:
-    """Orchestrates automated prompt optimization based on feedback batches"""
+    """Modern orchestrator with fast optimization modes and adaptive strategies"""
     
     def __init__(
         self,
@@ -62,6 +62,14 @@ class OptimizationOrchestrator:
         self._last_optimization_time: Optional[datetime] = None
         self._optimization_count_today = 0
         self._last_count_reset_date = timezone.now().date()
+        
+        # Modern optimization configuration
+        self.optimization_strategies = {
+            'emergency': {'mode': 'fast', 'timeout': 5, 'min_improvement': 3.0},
+            'continuous': {'mode': 'single_shot', 'timeout': 10, 'min_improvement': 5.0},
+            'batch': {'mode': 'mini_opro', 'timeout': 30, 'min_improvement': 8.0},
+            'thorough': {'mode': 'legacy', 'timeout': 120, 'min_improvement': 10.0}
+        }
     
     async def check_and_trigger_optimization(self) -> Optional[OptimizationResult]:
         """Check if optimization should be triggered and execute if conditions are met"""
@@ -87,6 +95,12 @@ class OptimizationOrchestrator:
                 logger.info(f"Optimization not triggered: {trigger_analysis['reason']}")
                 return None
             
+            # Check convergence before proceeding with optimization
+            convergence_blocked = await self._check_convergence_status(trigger_analysis.get('feedback_batch', []))
+            if convergence_blocked:
+                logger.info("Optimization blocked due to convergence detection")
+                return None
+            
             logger.info(f"Triggering optimization: {trigger_analysis['reason']}")
             
             # Execute optimization cycle
@@ -107,7 +121,7 @@ class OptimizationOrchestrator:
         recent_feedback = [
             feedback async for feedback in UserFeedback.objects.filter(
                 created_at__gte=cutoff_time
-            ).select_related('draft__prompt')
+            ).select_related('draft__system_prompt')
         ]
         
         if len(recent_feedback) < self.trigger_config.min_feedback_count:
@@ -206,10 +220,37 @@ class OptimizationOrchestrator:
         
         logger.info(f"Starting optimization cycle with {len(feedback_batch)} feedback instances")
         
-        # Get current active prompt
-        current_prompt = await sync_to_async(
-            SystemPrompt.objects.filter(is_active=True).first
-        )()
+        # Get current active prompt for the session
+        session = None
+        if feedback_batch:
+            # Extract session from feedback
+            first_feedback = feedback_batch[0]
+            if hasattr(first_feedback, 'draft') and hasattr(first_feedback.draft, 'email'):
+                session = first_feedback.draft.email.session
+        
+        # Check cold start status if we have a session
+        if session and not self._check_cold_start_status(session):
+            logger.warning(f"Optimization blocked for session {session.id}: Cold start not complete")
+            return OptimizationResult(
+                trigger_reason="Cold start not complete",
+                baseline_prompt=None,
+                candidate_prompts=[],
+                best_candidate=None,
+                evaluation_results={},
+                deployed=False,
+                improvement_percentage=0.0,
+                feedback_batch_size=len(feedback_batch),
+                optimization_time=start_time
+            )
+        
+        if session:
+            current_prompt = await sync_to_async(
+                SystemPrompt.objects.filter(session=session, is_active=True).first
+            )()
+        else:
+            current_prompt = await sync_to_async(
+                SystemPrompt.objects.filter(is_active=True).first
+            )()
         
         if not current_prompt:
             raise ValueError("No active system prompt found")
@@ -217,11 +258,26 @@ class OptimizationOrchestrator:
         # Build rewrite context from feedback batch
         rewrite_context = await self._build_rewrite_context(current_prompt, feedback_batch)
         
-        # Generate candidate prompts
-        candidates = await self.prompt_rewriter.rewrite_prompt(
-            rewrite_context, 
-            mode="aggressive"  # Use aggressive mode for batch-triggered optimization
-        )
+        # Select optimization strategy based on context
+        optimization_strategy = self._select_optimization_strategy(trigger_analysis, len(feedback_batch))
+        
+        logger.info(f"Using optimization strategy: {optimization_strategy['name']}")
+        
+        # Generate candidate prompts with timeout
+        try:
+            candidates = await asyncio.wait_for(
+                self.prompt_rewriter.rewrite_prompt(
+                    rewrite_context,
+                    mode=optimization_strategy['mode']
+                ),
+                timeout=optimization_strategy['timeout']
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"Optimization timed out after {optimization_strategy['timeout']}s, falling back to fast mode")
+            candidates = await self.prompt_rewriter.rewrite_prompt(
+                rewrite_context,
+                mode="fast"
+            )
         
         logger.info(f"Generated {len(candidates)} candidate prompts")
         
@@ -243,8 +299,8 @@ class OptimizationOrchestrator:
                 best_candidate = candidates[i]
                 best_comparison = comparison
         
-        # Decide whether to deploy
-        should_deploy = self._should_deploy_candidate(best_comparison)
+        # Decide whether to deploy using strategy-specific criteria
+        should_deploy = self._should_deploy_candidate(best_comparison, optimization_strategy)
         
         if should_deploy and best_candidate:
             await self._deploy_new_prompt(current_prompt, best_candidate, best_comparison)
@@ -335,20 +391,28 @@ class OptimizationOrchestrator:
             constraints=constraints
         )
     
-    def _should_deploy_candidate(self, comparison_result) -> bool:
-        """Determine if a candidate should be deployed based on evaluation results"""
+    def _should_deploy_candidate(self, comparison_result, optimization_strategy: Dict[str, Any] = None) -> bool:
+        """Determine if a candidate should be deployed based on evaluation results and strategy"""
         
         if not comparison_result or comparison_result.winner != "candidate":
             return False
         
-        # Require significant improvement and statistical confidence
-        min_improvement = 5.0  # At least 5% improvement
-        min_confidence = 0.8   # At least 80% confidence
+        # Default strategy for backward compatibility
+        if optimization_strategy is None:
+            optimization_strategy = {'min_improvement': 5.0, 'mode': 'continuous'}
         
-        return (
-            comparison_result.improvement >= min_improvement and
-            comparison_result.confidence_level >= min_confidence
-        )
+        # Use strategy-specific improvement thresholds
+        min_improvement = optimization_strategy.get('min_improvement', 5.0)
+        min_confidence = 0.8   # Keep confidence requirement consistent
+        
+        # For fast strategies, be more lenient with confidence requirements
+        if optimization_strategy.get('mode') in ['fast', 'single_shot']:
+            min_confidence = 0.6
+        
+        has_sufficient_improvement = comparison_result.improvement >= min_improvement
+        has_sufficient_confidence = getattr(comparison_result, 'confidence_level', 0.8) >= min_confidence
+        
+        return has_sufficient_improvement and has_sufficient_confidence
     
     async def _deploy_new_prompt(
         self, 
@@ -360,6 +424,7 @@ class OptimizationOrchestrator:
         
         # Create new prompt version
         new_prompt = SystemPrompt(
+            session=current_prompt.session,  # Preserve session
             content=new_candidate.content,
             version=current_prompt.version + 1,
             performance_score=comparison_result.candidate.performance_score,
@@ -377,6 +442,9 @@ class OptimizationOrchestrator:
     async def get_optimization_status(self) -> Dict[str, Any]:
         """Get current optimization status and metrics"""
         
+        # Get optimization recommendations
+        recommendations = await self.get_optimization_recommendations()
+        
         return {
             'last_optimization_time': self._last_optimization_time,
             'optimizations_today': self._optimization_count_today,
@@ -390,20 +458,111 @@ class OptimizationOrchestrator:
                 'min_feedback_count': self.trigger_config.min_feedback_count,
                 'min_negative_feedback_ratio': self.trigger_config.min_negative_feedback_ratio,
                 'feedback_window_hours': self.trigger_config.feedback_window_hours
-            }
+            },
+            'recommendations': recommendations,
+            'available_strategies': self.optimization_strategies
         }
     
-    async def force_optimization(self, reason: str = "Manual trigger") -> OptimizationResult:
-        """Force an optimization cycle regardless of normal triggers"""
+    def _check_cold_start_status(self, session) -> bool:
+        """Check if optimization is allowed based on cold start status"""
+        try:
+            from app.services.cold_start_manager import ColdStartManager
+            cold_start_manager = ColdStartManager()
+            
+            # Check if cold start allows optimization
+            if not cold_start_manager.should_allow_optimization(session):
+                logger.info(f"Optimization blocked for session {session.id}: Cold start not complete")
+                return False
+            
+            return True
+        except ImportError:
+            # If cold start manager not available, allow optimization
+            logger.warning("Cold start manager not available, allowing optimization")
+            return True
+        except Exception as e:
+            logger.error(f"Error checking cold start status: {str(e)}")
+            # On error, be conservative and block optimization
+            return False
+    
+    def optimize_prompt(self, session, feedback_list):
+        """Synchronous wrapper for manual optimization trigger"""
+        import asyncio
+        from dataclasses import dataclass
         
-        logger.info(f"Forcing optimization: {reason}")
+        @dataclass
+        class SimpleOptimizationResult:
+            success: bool
+            new_prompt: Optional[SystemPrompt] = None
+            improvement_percentage: float = 0.0
+            optimization_reason: str = ""
+            error_message: str = ""
         
-        # Build fake trigger analysis for forced optimization
+        # Check cold start status first
+        if not self._check_cold_start_status(session):
+            return SimpleOptimizationResult(
+                success=False,
+                error_message="Optimization blocked: Cold start phase not complete"
+            )
+        
+        try:
+            # Run the async optimization in a new event loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Convert feedback list to the format expected by the orchestrator
+            trigger_analysis = {
+                'should_trigger': True,
+                'reason': f"Manual trigger with {len(feedback_list)} feedback items",
+                'feedback_count': len(feedback_list),
+                'feedback_batch': feedback_list,
+                'forced_strategy': 'continuous'
+            }
+            
+            # Execute optimization
+            result = loop.run_until_complete(self._execute_optimization_cycle(trigger_analysis))
+            
+            # Convert to simple result format
+            if result.deployed and result.best_candidate:
+                # Get the newly created prompt
+                new_prompt = SystemPrompt.objects.filter(
+                    session=session,
+                    version=result.baseline_prompt.version + 1
+                ).first()
+                
+                return SimpleOptimizationResult(
+                    success=True,
+                    new_prompt=new_prompt,
+                    improvement_percentage=result.improvement_percentage,
+                    optimization_reason=result.trigger_reason
+                )
+            else:
+                return SimpleOptimizationResult(
+                    success=False,
+                    error_message="No improvement found",
+                    optimization_reason=result.trigger_reason
+                )
+                
+        except Exception as e:
+            logger.error(f"Optimization failed: {str(e)}")
+            return SimpleOptimizationResult(
+                success=False,
+                error_message=str(e)
+            )
+        finally:
+            loop.close()
+    
+    async def force_optimization(self, reason: str = "Manual trigger", strategy: str = "continuous", override_convergence: bool = False) -> OptimizationResult:
+        """Force an optimization cycle with specified strategy"""
+        
+        logger.info(f"Forcing optimization with {strategy} strategy: {reason}")
+        
+        # Build trigger analysis for forced optimization
         trigger_analysis = {
             'should_trigger': True,
             'reason': reason,
             'feedback_count': 0,
-            'feedback_batch': []
+            'feedback_batch': [],
+            'forced_strategy': strategy
         }
         
         # If no recent feedback, use all feedback from last 7 days
@@ -412,9 +571,168 @@ class OptimizationOrchestrator:
             recent_feedback = [
                 feedback async for feedback in UserFeedback.objects.filter(
                     created_at__gte=cutoff_time
-                ).select_related('draft__prompt')[:20]  # Limit to recent 20
+                ).select_related('draft__system_prompt')[:20]  # Limit to recent 20
             ]
             trigger_analysis['feedback_batch'] = recent_feedback
             trigger_analysis['feedback_count'] = len(recent_feedback)
         
+        # Check convergence unless explicitly overridden
+        if not override_convergence:
+            convergence_blocked = await self._check_convergence_status(trigger_analysis.get('feedback_batch', []))
+            if convergence_blocked:
+                logger.warning(f"Force optimization blocked by convergence detection - use override_convergence=True to force")
+                return OptimizationResult(
+                    trigger_reason=f"Force optimization blocked: {reason}",
+                    baseline_prompt=None,
+                    candidate_prompts=[],
+                    best_candidate=None,
+                    evaluation_results={},
+                    deployed=False,
+                    improvement_percentage=0.0,
+                    feedback_batch_size=len(trigger_analysis['feedback_batch']),
+                    optimization_time=timezone.now()
+                )
+        
         return await self._execute_optimization_cycle(trigger_analysis)
+    
+    async def fast_optimize(self, time_budget: int = 10, min_performance: float = 0.7) -> OptimizationResult:
+        """Fast optimization mode for immediate improvements"""
+        
+        logger.info(f"Starting fast optimization with {time_budget}s budget")
+        
+        # Select appropriate fast strategy based on time budget
+        if time_budget < 5:
+            strategy = 'emergency'
+        elif time_budget < 15:
+            strategy = 'continuous'
+        else:
+            strategy = 'batch'
+        
+        return await self.force_optimization(
+            reason=f"Fast optimization (budget: {time_budget}s)",
+            strategy=strategy
+        )
+    
+    def _select_optimization_strategy(self, trigger_analysis: Dict[str, Any], feedback_count: int) -> Dict[str, Any]:
+        """Select optimization strategy based on context"""
+        
+        # Check if strategy is forced
+        if 'forced_strategy' in trigger_analysis:
+            strategy_name = trigger_analysis['forced_strategy']
+            if strategy_name in self.optimization_strategies:
+                strategy = self.optimization_strategies[strategy_name].copy()
+                strategy['name'] = strategy_name
+                return strategy
+        
+        # Select strategy based on urgency and feedback volume
+        negative_ratio = trigger_analysis.get('negative_feedback_ratio', 0.0)
+        average_rating = trigger_analysis.get('average_rating', 3.0)
+        
+        # Emergency mode for critical issues
+        if negative_ratio > 0.6 or average_rating < 2.0:
+            strategy = self.optimization_strategies['emergency'].copy()
+            strategy['name'] = 'emergency'
+            return strategy
+        
+        # Batch mode for large feedback volumes
+        elif feedback_count >= 20:
+            strategy = self.optimization_strategies['batch'].copy()
+            strategy['name'] = 'batch'
+            return strategy
+        
+        # Continuous mode for regular optimization
+        elif feedback_count >= 10:
+            strategy = self.optimization_strategies['continuous'].copy()
+            strategy['name'] = 'continuous'
+            return strategy
+        
+        # Emergency mode for low feedback (quick iteration)
+        else:
+            strategy = self.optimization_strategies['emergency'].copy()
+            strategy['name'] = 'emergency'
+            return strategy
+    
+    async def get_optimization_recommendations(self) -> Dict[str, Any]:
+        """Get recommendations for optimization strategy"""
+        
+        # Analyze current feedback state
+        trigger_analysis = await self._analyze_feedback_for_triggers()
+        
+        # Determine recommended strategy
+        recommended_strategy = self._select_optimization_strategy(
+            trigger_analysis, 
+            trigger_analysis.get('feedback_count', 0)
+        )
+        
+        return {
+            'should_optimize': trigger_analysis['should_trigger'],
+            'trigger_reason': trigger_analysis.get('reason', 'No trigger'),
+            'recommended_strategy': recommended_strategy['name'],
+            'estimated_time': recommended_strategy['timeout'],
+            'expected_improvement': recommended_strategy['min_improvement'],
+            'feedback_analysis': {
+                'count': trigger_analysis.get('feedback_count', 0),
+                'negative_ratio': trigger_analysis.get('negative_feedback_ratio', 0.0),
+                'average_rating': trigger_analysis.get('average_rating', 3.0)
+            },
+            'available_strategies': list(self.optimization_strategies.keys())
+        }
+    
+    async def _check_convergence_status(self, feedback_batch: List[UserFeedback]) -> bool:
+        """Check if optimization should be blocked due to convergence"""
+        try:
+            from app.services.convergence_detector import ConvergenceDetector
+            
+            # Extract session from feedback if available
+            session = None
+            if feedback_batch:
+                first_feedback = feedback_batch[0]
+                if hasattr(first_feedback, 'draft') and hasattr(first_feedback.draft, 'email'):
+                    session = first_feedback.draft.email.session
+            
+            # If no session found from feedback, get the most recently updated session
+            if not session:
+                from core.models import Session
+                session = await sync_to_async(
+                    Session.objects.filter(is_active=True).order_by('-updated_at').first
+                )()
+            
+            if not session:
+                logger.warning("No session found for convergence check - allowing optimization")
+                return False
+            
+            # Initialize convergence detector
+            detector = ConvergenceDetector()
+            
+            # Check if convergence assessment should be performed
+            should_check = await sync_to_async(detector.should_check_convergence)(session)
+            if not should_check:
+                logger.info(f"Convergence check not needed for session {session.id}")
+                return False
+            
+            # Perform convergence assessment
+            assessment = await sync_to_async(detector.assess_convergence)(session)
+            
+            if assessment.get('converged', False):
+                confidence = assessment.get('confidence_score', 0.0)
+                factors = assessment.get('factors', {})
+                recommendations = assessment.get('recommendations', [])
+                
+                logger.info(f"Session {session.id} has converged (confidence: {confidence:.2f})")
+                logger.info(f"Convergence factors: {factors}")
+                
+                # Log convergence recommendations
+                for rec in recommendations:
+                    if rec.get('action') == 'stop_optimization':
+                        logger.info(f"Convergence recommendation: {rec.get('reason', 'Stop optimization')}")
+                
+                return True
+            
+            else:
+                logger.info(f"Session {session.id} has not converged - optimization can proceed")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error checking convergence status: {str(e)}")
+            # On error, allow optimization to proceed to avoid blocking the system
+            return False

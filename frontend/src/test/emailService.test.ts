@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { EmailService } from '../services/emailService';
-import { EmailMessage, EmailDraft, UserFeedback } from '../types/email';
+import type { UserFeedback } from '../types/email';
 
 describe('EmailService', () => {
   let emailService: EmailService;
@@ -34,7 +34,7 @@ describe('EmailService', () => {
     });
 
     it('should throw NotImplementedError currently', async () => {
-      await expect(emailService.generateFakeEmail()).rejects.toThrow('not implemented');
+      await expect(emailService.generateFakeEmail('random')).rejects.toThrow('not implemented');
     });
   });
 
@@ -77,7 +77,7 @@ describe('EmailService', () => {
 
       // This test will fail until implementation is complete
       try {
-        await emailService.submitFeedback(feedback);
+        await emailService.submitFeedback(feedback.email_id, feedback.draft_id, feedback);
         // If implemented, should not throw
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
@@ -94,7 +94,7 @@ describe('EmailService', () => {
         timestamp: new Date().toISOString()
       };
 
-      await expect(emailService.submitFeedback(feedback)).rejects.toThrow('not implemented');
+      await expect(emailService.submitFeedback(feedback.email_id, feedback.draft_id, feedback)).rejects.toThrow('not implemented');
     });
   });
 });

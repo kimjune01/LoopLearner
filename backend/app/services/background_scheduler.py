@@ -18,6 +18,229 @@ from .unified_llm_provider import LLMProviderFactory, LLMConfig
 logger = logging.getLogger(__name__)
 
 
+class BackgroundOptimizationScheduler:
+    """Background scheduler for automated optimization based on feedback thresholds"""
+    
+    def __init__(self, trigger_config: OptimizationTrigger = None):
+        self.trigger_config = trigger_config or OptimizationTrigger()
+        self._last_optimization_time = None
+        self._optimization_count_today = 0
+        self._last_count_reset_date = None
+    
+    def check_and_trigger_optimization(self, session=None):
+        """Check if optimization should be triggered and execute if needed"""
+        from core.models import Session, SystemPrompt, UserFeedback
+        
+        # Reset daily count if needed
+        self._reset_daily_count_if_needed()
+        
+        # Track if we're checking a specific session
+        specific_session_check = session is not None
+        
+        # Check time-based constraints
+        if not self._can_optimize_based_on_time():
+            logger.info("Skipping optimization: too soon since last optimization")
+            return False
+        
+        # Check daily limit
+        if self._optimization_count_today >= self.trigger_config.max_optimization_frequency_per_day:
+            logger.info("Skipping optimization: daily limit reached")
+            return False
+        
+        # Get sessions to check
+        if specific_session_check:
+            sessions_to_check = [session]
+        else:
+            sessions_to_check = Session.objects.filter(is_active=True)
+        
+        optimization_triggered = False
+        
+        for current_session in sessions_to_check:
+            # Check if session has active prompt
+            if not SystemPrompt.objects.filter(session=current_session, is_active=True).exists():
+                continue
+            
+            # Get recent feedback
+            cutoff_time = timezone.now() - timedelta(hours=self.trigger_config.feedback_window_hours)
+            recent_feedback = UserFeedback.objects.filter(
+                draft__email__session=current_session,
+                created_at__gte=cutoff_time
+            ).select_related('draft', 'draft__email')
+            
+            feedback_count = recent_feedback.count()
+            
+            # Check minimum feedback count
+            if feedback_count < self.trigger_config.min_feedback_count:
+                logger.debug(f"Session {current_session.id}: Not enough feedback ({feedback_count} < {self.trigger_config.min_feedback_count})")
+                continue
+            
+            # Calculate negative feedback ratio
+            negative_feedback_count = recent_feedback.filter(
+                action__in=['reject', 'edit']
+            ).count()
+            negative_ratio = negative_feedback_count / feedback_count if feedback_count > 0 else 0
+            
+            # Check negative feedback threshold
+            if negative_ratio < self.trigger_config.min_negative_feedback_ratio:
+                logger.debug(f"Session {current_session.id}: Negative ratio too low ({negative_ratio:.2f} < {self.trigger_config.min_negative_feedback_ratio})")
+                continue
+            
+            # Trigger optimization
+            logger.info(f"Triggering optimization for session {current_session.id}: {negative_ratio:.0%} negative feedback")
+            result = self._execute_optimization(current_session, list(recent_feedback))
+            
+            if result.get('success'):
+                self._last_optimization_time = timezone.now()
+                self._optimization_count_today += 1
+                optimization_triggered = True
+                
+                # If checking a specific session, return the result immediately
+                if specific_session_check:
+                    return True
+        
+        return optimization_triggered
+    
+    def _can_optimize_based_on_time(self):
+        """Check if enough time has passed since last optimization"""
+        if not self._last_optimization_time:
+            return True
+        
+        time_since_last = timezone.now() - self._last_optimization_time
+        min_interval = timedelta(hours=self.trigger_config.min_time_since_last_optimization_hours)
+        
+        return time_since_last >= min_interval
+    
+    def _reset_daily_count_if_needed(self):
+        """Reset daily optimization count if it's a new day"""
+        today = timezone.now().date()
+        if self._last_count_reset_date != today:
+            self._optimization_count_today = 0
+            self._last_count_reset_date = today
+    
+    def _execute_optimization(self, session, feedback_list):
+        """Execute the optimization"""
+        from app.services.optimization_orchestrator import OptimizationOrchestrator
+        
+        try:
+            orchestrator = OptimizationOrchestrator()
+            result = orchestrator.optimize_prompt(session, feedback_list)
+            
+            if result.success:
+                return {
+                    'success': True,
+                    'new_prompt_version': result.new_prompt.version,
+                    'improvement_percentage': result.improvement_percentage
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': result.error_message
+                }
+        except Exception as e:
+            logger.error(f"Optimization failed: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
+    def check_all_sessions(self):
+        """Check all active sessions for optimization triggers"""
+        from core.models import Session, SystemPrompt, UserFeedback
+        
+        results = []
+        sessions = Session.objects.filter(is_active=True)
+        
+        # Reset daily count if needed
+        self._reset_daily_count_if_needed()
+        
+        # Check time constraints once for all sessions
+        if not self._can_optimize_based_on_time():
+            logger.info("Skipping all optimizations: too soon since last optimization")
+            for session in sessions:
+                results.append({
+                    'session_id': session.id,
+                    'session_name': session.name,
+                    'triggered': False
+                })
+            return results
+        
+        # Check daily limit
+        if self._optimization_count_today >= self.trigger_config.max_optimization_frequency_per_day:
+            logger.info("Skipping all optimizations: daily limit reached")
+            for session in sessions:
+                results.append({
+                    'session_id': session.id,
+                    'session_name': session.name,
+                    'triggered': False
+                })
+            return results
+        
+        # Now check each session without time constraints
+        for session in sessions:
+            triggered = False
+            
+            # Check if session has active prompt
+            if not SystemPrompt.objects.filter(session=session, is_active=True).exists():
+                results.append({
+                    'session_id': session.id,
+                    'session_name': session.name,
+                    'triggered': False
+                })
+                continue
+            
+            # Get recent feedback
+            cutoff_time = timezone.now() - timedelta(hours=self.trigger_config.feedback_window_hours)
+            recent_feedback = UserFeedback.objects.filter(
+                draft__email__session=session,
+                created_at__gte=cutoff_time
+            ).select_related('draft', 'draft__email')
+            
+            feedback_count = recent_feedback.count()
+            
+            # Check minimum feedback count
+            if feedback_count < self.trigger_config.min_feedback_count:
+                logger.debug(f"Session {session.id}: Not enough feedback ({feedback_count} < {self.trigger_config.min_feedback_count})")
+                results.append({
+                    'session_id': session.id,
+                    'session_name': session.name,
+                    'triggered': False
+                })
+                continue
+            
+            # Calculate negative feedback ratio
+            negative_feedback_count = recent_feedback.filter(
+                action__in=['reject', 'edit']
+            ).count()
+            negative_ratio = negative_feedback_count / feedback_count if feedback_count > 0 else 0
+            
+            # Check negative feedback threshold
+            if negative_ratio < self.trigger_config.min_negative_feedback_ratio:
+                logger.debug(f"Session {session.id}: Negative ratio too low ({negative_ratio:.2f} < {self.trigger_config.min_negative_feedback_ratio})")
+                results.append({
+                    'session_id': session.id,
+                    'session_name': session.name,
+                    'triggered': False
+                })
+                continue
+            
+            # Trigger optimization
+            logger.info(f"Triggering optimization for session {session.id}: {negative_ratio:.0%} negative feedback")
+            result = self._execute_optimization(session, list(recent_feedback))
+            
+            if result.get('success'):
+                self._last_optimization_time = timezone.now()
+                self._optimization_count_today += 1
+                triggered = True
+            
+            results.append({
+                'session_id': session.id,
+                'session_name': session.name,
+                'triggered': triggered
+            })
+        
+        return results
+
+
 class OptimizationScheduler:
     """Schedules and manages automated optimization checks"""
     

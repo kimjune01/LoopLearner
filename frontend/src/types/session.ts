@@ -8,6 +8,18 @@ export interface Session {
   optimization_iterations: number;
   total_emails_processed: number;
   total_feedback_collected: number;
+  active_prompt?: {
+    id: string | null;
+    version: number | null;
+    content: string | null;
+    parameters?: string[];
+  };
+  recent_emails?: Array<{
+    id: number;
+    subject: string;
+    created_at: string;
+    scenario_type: string;
+  }>;
 }
 
 export interface SessionListResponse {

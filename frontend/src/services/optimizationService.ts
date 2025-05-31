@@ -1,4 +1,4 @@
-import { api } from './api';
+// Import removed - api is not used in this file
 
 export interface OptimizationStatus {
   status: string;

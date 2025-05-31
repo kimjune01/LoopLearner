@@ -72,7 +72,7 @@ class PromptRewriter(ABC):
 
 
 class LLMBasedPromptRewriter(PromptRewriter):
-    """LLM-based prompt rewriter with similarity matching and feedback learning"""
+    """Modern LLM-based prompt rewriter with OPRO-inspired techniques and fast optimization"""
     
     def __init__(
         self, 
@@ -86,39 +86,162 @@ class LLMBasedPromptRewriter(PromptRewriter):
         self.reward_aggregator = reward_function_aggregator
         self.meta_prompt_manager = meta_prompt_manager
         self.feedback_patterns = []  # Cache for performance
+        
+        # Modern optimization settings
+        self.optimization_modes = {
+            'fast': {'max_iterations': 1, 'candidates': 1, 'timeout': 5},
+            'balanced': {'max_iterations': 2, 'candidates': 3, 'timeout': 15},
+            'thorough': {'max_iterations': 3, 'candidates': 5, 'timeout': 30}
+        }
+        
+        # Research-backed meta-prompt template
+        self.static_metaprompt = """
+Take a deep breath and work on this problem step by step.
+
+You are an expert prompt engineer specializing in optimizing prompts for AI assistants. Your task is to improve the given prompt to make it more effective at generating high-quality responses.
+
+Current prompt:
+\"\"\"{current_prompt}\"\"\"
+
+Context: This prompt is used for {task_context}
+
+Performance feedback:
+{performance_feedback}
+
+Optimization guidelines:
+1. **Clarity**: Make instructions specific and unambiguous
+2. **Structure**: Use clear step-by-step format when helpful
+3. **Context**: Include relevant background and constraints
+4. **Examples**: Add concrete examples if they would help
+5. **Format**: Specify desired output format and style
+6. **Tone**: Ensure appropriate tone for the task
+
+Common effective prompt elements:
+- "Think step by step"
+- "Be specific and detailed"
+- "Consider the context carefully"
+- Clear role definition ("You are a...")
+- Explicit constraints and requirements
+- Example inputs and outputs
+
+Focus on the biggest weakness in the current prompt and make targeted improvements. Keep the core purpose intact while making it more likely to produce high-quality responses.
+
+Generate ONLY the improved prompt without any explanations:
+"""
     
     async def rewrite_prompt(
         self, 
         context: RewriteContext,
-        mode: str = "conservative"
+        mode: str = "fast"  # Changed default to fast
     ) -> List[RewriteCandidate]:
-        """Generate prompt rewrites using LLM with similarity matching"""
+        """Generate prompt rewrites using modern optimization techniques"""
         
-        # Step 1: Find similar successful prompts from database
-        similar_patterns = await self._find_similar_successful_prompts(context)
+        # Select optimization strategy based on mode
+        if mode in ['fast', 'cached']:
+            return await self._fast_optimization(context)
+        elif mode == 'single_shot':
+            return await self._single_shot_optimization(context)
+        elif mode == 'mini_opro':
+            return await self._mini_opro_optimization(context)
+        else:
+            # Legacy mode for backward compatibility
+            return await self._legacy_optimization(context, mode)
+    
+    async def _fast_optimization(self, context: RewriteContext) -> List[RewriteCandidate]:
+        """Ultra-fast optimization using cached patterns and rule-based improvements"""
         
-        # Step 2: Get meta-prompt template
-        meta_prompt = await self.meta_prompt_manager.get_meta_prompt(
-            context.email_scenario,
-            context.constraints
+        # First try cached pattern matching (sub-second)
+        cached_candidate = await self._try_cached_pattern_optimization(context)
+        if cached_candidate:
+            return [cached_candidate]
+        
+        # Fallback to rule-based direct optimization (1-3 seconds)
+        return await self._direct_instruction_optimization(context)
+    
+    async def _single_shot_optimization(self, context: RewriteContext) -> List[RewriteCandidate]:
+        """Single LLM call optimization (5-10 seconds)"""
+        
+        # Build focused optimization prompt
+        task_context = self._build_task_context(context)
+        performance_feedback = self._format_performance_feedback(context)
+        main_issue = self._identify_primary_issue(context)
+        
+        optimization_prompt = f"""
+Improve this prompt to make it more effective:
+
+\"\"\"{context.current_prompt.content}\"\"\"
+
+Main issue to fix: {main_issue}
+Context: {task_context}
+
+Make the prompt more specific and actionable while keeping it clear.
+
+Improved prompt:
+"""
+        
+        try:
+            response = await self.rewriter_llm.generate(
+                optimization_prompt,
+                temperature=0.3,
+                max_tokens=200,
+                timeout=10
+            )
+            
+            return [RewriteCandidate(
+                content=response.strip(),
+                confidence=0.8,
+                temperature=0.3,
+                reasoning=f"Single-shot optimization targeting: {main_issue}"
+            )]
+            
+        except Exception as e:
+            logger.warning(f"Single-shot optimization failed: {e}")
+            return await self._fast_optimization(context)  # Fallback
+    
+    async def _mini_opro_optimization(self, context: RewriteContext) -> List[RewriteCandidate]:
+        """Lightweight OPRO implementation (15-30 seconds)"""
+        
+        # Build mini meta-prompt with optimization trajectory
+        recent_history = await self._get_recent_optimization_history(context, limit=3)
+        
+        task_context = self._build_task_context(context)
+        performance_feedback = self._format_performance_feedback(context)
+        
+        mini_metaprompt = self.static_metaprompt.format(
+            current_prompt=context.current_prompt.content,
+            task_context=task_context,
+            performance_feedback=performance_feedback
         )
         
-        # Step 3: Build comprehensive rewriting instruction
-        rewrite_instruction = await self._build_llm_rewrite_instruction(
-            context, 
-            meta_prompt, 
-            similar_patterns
-        )
+        # Add optimization trajectory if available
+        if recent_history:
+            mini_metaprompt += f"\n\nRecent optimization attempts and results:\n{self._format_optimization_history(recent_history)}"
         
-        # Step 4: Generate candidates based on mode
-        if mode == "conservative":
-            candidates = await self._generate_conservative_rewrites(rewrite_instruction)
-        elif mode == "exploratory":
-            candidates = await self._generate_exploratory_rewrites(rewrite_instruction)
-        else:  # hybrid
-            candidates = await self._generate_hybrid_rewrites(rewrite_instruction)
+        mini_metaprompt += "\n\nGenerate 3 improved versions focusing on the main weakness:\n"
         
-        return candidates
+        try:
+            # Generate 3 candidates in parallel if possible
+            candidates = []
+            for i in range(3):
+                response = await self.rewriter_llm.generate(
+                    mini_metaprompt + f"\nVersion {i+1}:",
+                    temperature=0.4 + (i * 0.1),  # Slight temperature variation
+                    max_tokens=200,
+                    timeout=10
+                )
+                
+                candidates.append(RewriteCandidate(
+                    content=response.strip(),
+                    confidence=0.7 + (0.1 if i == 0 else 0),  # First candidate slightly higher confidence
+                    temperature=0.4 + (i * 0.1),
+                    reasoning=f"Mini-OPRO candidate {i+1} with slight variation"
+                ))
+            
+            return candidates
+            
+        except Exception as e:
+            logger.warning(f"Mini-OPRO optimization failed: {e}")
+            return await self._single_shot_optimization(context)  # Fallback
     
     async def select_best_candidate(
         self,
@@ -219,39 +342,116 @@ class LLMBasedPromptRewriter(PromptRewriter):
             logger.warning(f"Similarity matching failed: {e}")
             return []
     
-    async def _build_llm_rewrite_instruction(
-        self, 
-        context: RewriteContext, 
-        meta_prompt: str, 
-        similar_patterns: List[SimilarityMatch]
-    ) -> str:
-        """Build comprehensive instruction for LLM-based rewriting"""
+    async def _try_cached_pattern_optimization(self, context: RewriteContext) -> Optional[RewriteCandidate]:
+        """Try to optimize using cached successful patterns (sub-second)"""
         
-        similar_prompts_text = ""
-        if similar_patterns:
-            similar_prompts_text = "\n\nSimilar Successful Prompts:\n"
-            for i, match in enumerate(similar_patterns[:2]):  # Top 2
-                similar_prompts_text += f"{i+1}. {match.prompt.content} (Success rate: {match.success_rate:.1%})\n"
+        try:
+            # Quick pattern matching based on scenario and feedback
+            cached_patterns = self._get_cached_patterns(context.email_scenario)
+            
+            if not cached_patterns:
+                return None
+            
+            # Apply best matching pattern using template substitution
+            best_pattern = self._select_best_cached_pattern(context, cached_patterns)
+            
+            if best_pattern:
+                optimized_content = self._apply_cached_pattern(context.current_prompt.content, best_pattern)
+                
+                return RewriteCandidate(
+                    content=optimized_content,
+                    confidence=0.6,
+                    temperature=0.0,  # Deterministic
+                    reasoning=f"Applied cached pattern: {best_pattern['trigger']}"
+                )
+            
+            return None
+            
+        except Exception as e:
+            logger.debug(f"Cached pattern optimization failed: {e}")
+            return None
+    
+    async def _direct_instruction_optimization(self, context: RewriteContext) -> List[RewriteCandidate]:
+        """Rule-based direct optimization (1-3 seconds)"""
         
-        return f"""
-{meta_prompt}
-
-CURRENT PROMPT TO IMPROVE:
-{context.current_prompt.content}
-
-CONTEXT:
-- Email Scenario: {context.email_scenario}
-- Recent Performance: {context.performance_history}
-- User Feedback Summary: {self._summarize_feedback(context.recent_feedback)}
-{similar_prompts_text}
-
-TASK: Rewrite the current prompt to improve performance based on:
-1. User feedback patterns
-2. Similar successful prompts 
-3. Scenario-specific requirements
-
-Generate an improved prompt that maintains clarity while addressing the identified issues:
-"""
+        improvements = []
+        current_content = context.current_prompt.content
+        
+        # Analyze feedback for common issues
+        feedback_analysis = self._analyze_feedback_patterns(context.recent_feedback)
+        
+        # Apply rule-based improvements
+        if feedback_analysis.get('clarity_score', 0) < 0.7:
+            improvements.append(self._add_clarity_improvements(current_content))
+        
+        if feedback_analysis.get('structure_score', 0) < 0.6:
+            improvements.append(self._add_structure_improvements(current_content))
+        
+        if feedback_analysis.get('specificity_score', 0) < 0.6:
+            improvements.append(self._add_specificity_improvements(current_content))
+        
+        # Apply best improvement or combine multiple
+        if improvements:
+            optimized_content = self._apply_rule_based_improvements(current_content, improvements)
+        else:
+            # Default improvement: add "Think step by step" if not present
+            optimized_content = self._add_default_improvements(current_content)
+        
+        return [RewriteCandidate(
+            content=optimized_content,
+            confidence=0.7,
+            temperature=0.0,
+            reasoning="Rule-based direct optimization with template improvements"
+        )]
+    
+    def _build_task_context(self, context: RewriteContext) -> str:
+        """Build concise task context description"""
+        return f"an AI email assistant that helps with {context.email_scenario} emails"
+    
+    def _format_performance_feedback(self, context: RewriteContext) -> str:
+        """Format performance feedback concisely"""
+        if not context.recent_feedback:
+            return "No specific feedback available yet."
+        
+        # Analyze recent feedback for main issues
+        issues = []
+        
+        # Check performance history
+        if context.performance_history.get('f1_score', 1.0) < 0.7:
+            issues.append("Low accuracy in responses")
+        if context.performance_history.get('user_rating', 5) < 3:
+            issues.append("Poor user satisfaction")
+        
+        # Check recent feedback actions
+        recent_actions = [f.action for f in context.recent_feedback[-5:]]
+        reject_rate = recent_actions.count('reject') / len(recent_actions) if recent_actions else 0
+        
+        if reject_rate > 0.4:
+            issues.append("High rejection rate")
+        
+        return f"Main issues: {', '.join(issues) if issues else 'Generally good performance, looking for incremental improvements'}"
+    
+    def _identify_primary_issue(self, context: RewriteContext) -> str:
+        """Identify the primary issue to focus optimization on"""
+        
+        # Analyze feedback patterns
+        if not context.recent_feedback:
+            return "lack of specific user feedback"
+        
+        # Count feedback types
+        actions = [f.action for f in context.recent_feedback[-10:]]
+        
+        if actions.count('reject') > len(actions) * 0.4:
+            return "high rejection rate - prompt may be unclear or inappropriate"
+        
+        if actions.count('edit') > len(actions) * 0.3:
+            return "frequent edits needed - prompt lacks specificity"
+        
+        # Check performance metrics
+        if context.performance_history.get('f1_score', 1.0) < 0.6:
+            return "low accuracy - prompt may not provide clear enough guidance"
+        
+        return "general refinement needed for better performance"
     
     async def _generate_conservative_rewrites(self, instruction: str) -> List[RewriteCandidate]:
         """Generate single high-confidence rewrite"""
@@ -400,3 +600,259 @@ Generate an improved prompt that maintains clarity while addressing the identifi
             logger.debug(f"Refreshed {len(self.feedback_patterns)} feedback patterns")
         except Exception as e:
             logger.error(f"Failed to refresh feedback patterns: {e}")
+    
+    # New helper methods for modern optimization techniques
+    
+    def _get_cached_patterns(self, scenario_type: str) -> List[Dict]:
+        """Get cached optimization patterns for scenario type"""
+        
+        # Pre-computed patterns based on research
+        pattern_library = {
+            'customer_service': [
+                {
+                    'trigger': 'low_politeness',
+                    'fix': 'add_courtesy_phrases',
+                    'template': 'Please be polite and courteous. Start responses with appropriate greetings and end with helpful closures.'
+                },
+                {
+                    'trigger': 'unclear_intent', 
+                    'fix': 'explicit_purpose_statement',
+                    'template': 'Begin by clearly acknowledging the customer\'s request and state your intent to help.'
+                }
+            ],
+            'technical_support': [
+                {
+                    'trigger': 'vague_steps',
+                    'fix': 'numbered_instructions', 
+                    'template': 'Provide step-by-step numbered instructions. Be specific about each action the user should take.'
+                },
+                {
+                    'trigger': 'no_examples',
+                    'fix': 'concrete_example_addition',
+                    'template': 'Include concrete examples to illustrate your points and make instructions clearer.'
+                }
+            ],
+            'general': [
+                {
+                    'trigger': 'missing_structure',
+                    'fix': 'add_step_by_step',
+                    'template': 'Think step by step and organize your response clearly.'
+                },
+                {
+                    'trigger': 'lack_specificity',
+                    'fix': 'add_detail_requirement',
+                    'template': 'Be specific and detailed in your response. Provide concrete information rather than general statements.'
+                }
+            ]
+        }
+        
+        return pattern_library.get(scenario_type, pattern_library['general'])
+    
+    def _select_best_cached_pattern(self, context: RewriteContext, patterns: List[Dict]) -> Optional[Dict]:
+        """Select best matching cached pattern based on context"""
+        
+        # Simple heuristic-based selection
+        feedback_analysis = self._analyze_feedback_patterns(context.recent_feedback)
+        
+        # Match patterns to issues
+        if feedback_analysis.get('politeness_score', 1.0) < 0.6:
+            return next((p for p in patterns if p['trigger'] == 'low_politeness'), None)
+        
+        if feedback_analysis.get('clarity_score', 1.0) < 0.6:
+            return next((p for p in patterns if p['trigger'] == 'unclear_intent'), None)
+        
+        if feedback_analysis.get('structure_score', 1.0) < 0.6:
+            return next((p for p in patterns if p['trigger'] == 'missing_structure'), None)
+        
+        # Default to first pattern if no specific match
+        return patterns[0] if patterns else None
+    
+    def _apply_cached_pattern(self, current_prompt: str, pattern: Dict) -> str:
+        """Apply cached pattern to current prompt"""
+        
+        # Simple template-based improvement
+        if pattern['fix'] == 'add_courtesy_phrases':
+            if 'please' not in current_prompt.lower():
+                return f"{current_prompt}\n\n{pattern['template']}"
+        
+        elif pattern['fix'] == 'add_step_by_step':
+            if 'step by step' not in current_prompt.lower():
+                return f"Think step by step.\n\n{current_prompt}"
+        
+        elif pattern['fix'] == 'add_detail_requirement':
+            if 'specific' not in current_prompt.lower() and 'detailed' not in current_prompt.lower():
+                return f"{current_prompt}\n\n{pattern['template']}"
+        
+        # Default: prepend template guidance
+        return f"{pattern['template']}\n\n{current_prompt}"
+    
+    def _analyze_feedback_patterns(self, feedback_list: List[UserFeedback]) -> Dict[str, float]:
+        """Analyze feedback patterns to identify issues"""
+        
+        if not feedback_list:
+            return {'clarity_score': 0.8, 'structure_score': 0.8, 'specificity_score': 0.8, 'politeness_score': 0.8}
+        
+        # Simple heuristic analysis
+        recent_feedback = feedback_list[-10:]  # Last 10 items
+        total_feedback = len(recent_feedback)
+        
+        # Calculate scores based on action types
+        accepts = sum(1 for f in recent_feedback if f.action == 'accept')
+        rejects = sum(1 for f in recent_feedback if f.action == 'reject')
+        edits = sum(1 for f in recent_feedback if f.action == 'edit')
+        
+        # Basic scoring heuristics
+        clarity_score = max(0.3, (accepts + edits * 0.5) / total_feedback) if total_feedback > 0 else 0.8
+        structure_score = max(0.3, accepts / total_feedback) if total_feedback > 0 else 0.8
+        specificity_score = max(0.3, (total_feedback - rejects) / total_feedback) if total_feedback > 0 else 0.8
+        politeness_score = max(0.3, (total_feedback - rejects * 0.8) / total_feedback) if total_feedback > 0 else 0.8
+        
+        return {
+            'clarity_score': clarity_score,
+            'structure_score': structure_score, 
+            'specificity_score': specificity_score,
+            'politeness_score': politeness_score
+        }
+    
+    def _add_clarity_improvements(self, content: str) -> str:
+        """Add clarity improvements to prompt"""
+        clarity_additions = [
+            "Be clear and specific in your response.",
+            "Ensure your answer directly addresses the question.",
+            "Use simple, understandable language."
+        ]
+        
+        # Add if not already present
+        for addition in clarity_additions:
+            if addition.lower() not in content.lower():
+                return f"{content}\n\n{addition}"
+        
+        return content
+    
+    def _add_structure_improvements(self, content: str) -> str:
+        """Add structure improvements to prompt"""
+        if 'step by step' not in content.lower():
+            return f"Think step by step and organize your response clearly.\n\n{content}"
+        return content
+    
+    def _add_specificity_improvements(self, content: str) -> str:
+        """Add specificity improvements to prompt"""
+        if 'specific' not in content.lower() and 'detailed' not in content.lower():
+            return f"{content}\n\nBe specific and detailed in your response. Provide concrete examples when helpful."
+        return content
+    
+    def _apply_rule_based_improvements(self, content: str, improvements: List[str]) -> str:
+        """Apply the best rule-based improvement"""
+        # For now, just apply the first improvement
+        # In practice, you might want more sophisticated combination logic
+        return improvements[0] if improvements else content
+    
+    def _add_default_improvements(self, content: str) -> str:
+        """Add default improvements when no specific issues identified"""
+        
+        # Add "Think step by step" if not present - research shows this is effective
+        if 'step by step' not in content.lower():
+            return f"Take a deep breath and think step by step.\n\n{content}"
+        
+        # Add specificity requirement if not present
+        if 'specific' not in content.lower():
+            return f"{content}\n\nBe specific and detailed in your response."
+        
+        return content
+    
+    async def _get_recent_optimization_history(self, context: RewriteContext, limit: int = 3) -> List[Dict]:
+        """Get recent optimization history for OPRO-style trajectory"""
+        
+        try:
+            # Query recent system prompts with performance data
+            recent_prompts = []
+            
+            # This would query recent prompts and their performance in a real implementation
+            # For now, return empty to avoid database complexity
+            return recent_prompts
+            
+        except Exception as e:
+            logger.debug(f"Failed to get optimization history: {e}")
+            return []
+    
+    def _format_optimization_history(self, history: List[Dict]) -> str:
+        """Format optimization history for meta-prompt"""
+        
+        if not history:
+            return "No recent optimization history available."
+        
+        formatted = ""
+        for i, item in enumerate(history):
+            formatted += f"{i+1}. Prompt: \"{item.get('prompt', 'Unknown')}\" - Score: {item.get('score', 0.0):.2f}\n"
+        
+        return formatted
+    
+    async def _legacy_optimization(self, context: RewriteContext, mode: str) -> List[RewriteCandidate]:
+        """Legacy optimization method for backward compatibility"""
+        
+        # Step 1: Find similar successful prompts from database
+        similar_patterns = await self._find_similar_successful_prompts(context)
+        
+        # Step 2: Get meta-prompt template (fallback to static if manager fails)
+        try:
+            meta_prompt = await self.meta_prompt_manager.get_meta_prompt(
+                context.email_scenario,
+                context.constraints
+            )
+        except:
+            meta_prompt = self.static_metaprompt.format(
+                current_prompt=context.current_prompt.content,
+                task_context=self._build_task_context(context),
+                performance_feedback=self._format_performance_feedback(context)
+            )
+        
+        # Step 3: Build comprehensive rewriting instruction
+        rewrite_instruction = await self._build_legacy_rewrite_instruction(
+            context, 
+            meta_prompt, 
+            similar_patterns
+        )
+        
+        # Step 4: Generate candidates based on mode
+        if mode == "conservative":
+            candidates = await self._generate_conservative_rewrites(rewrite_instruction)
+        elif mode == "exploratory":
+            candidates = await self._generate_exploratory_rewrites(rewrite_instruction)
+        else:  # hybrid
+            candidates = await self._generate_hybrid_rewrites(rewrite_instruction)
+        
+        return candidates
+    
+    async def _build_legacy_rewrite_instruction(
+        self, 
+        context: RewriteContext, 
+        meta_prompt: str, 
+        similar_patterns: List[SimilarityMatch]
+    ) -> str:
+        """Build comprehensive instruction for legacy LLM-based rewriting"""
+        
+        similar_prompts_text = ""
+        if similar_patterns:
+            similar_prompts_text = "\n\nSimilar Successful Prompts:\n"
+            for i, match in enumerate(similar_patterns[:2]):  # Top 2
+                similar_prompts_text += f"{i+1}. {match.prompt.content} (Success rate: {match.success_rate:.1%})\n"
+        
+        return f"""
+{meta_prompt}
+
+CURRENT PROMPT TO IMPROVE:
+{context.current_prompt.content}
+
+CONTEXT:
+- Email Scenario: {context.email_scenario}
+- Recent Performance: {context.performance_history}
+- User Feedback Summary: {self._summarize_feedback(context.recent_feedback)}
+{similar_prompts_text}
+
+TASK: Rewrite the current prompt to improve performance based on:
+1. User feedback patterns
+2. Similar successful prompts 
+3. Scenario-specific requirements
+
+Generate an improved prompt that maintains clarity while addressing the identified issues:
+"""

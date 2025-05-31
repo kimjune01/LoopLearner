@@ -83,6 +83,66 @@ class SyntheticEmailGenerator(EmailGenerator):
                 'I came across your company while researching solutions for our current challenge. Would it be possible to schedule a brief call to discuss how your services might align with our needs?'
             ],
             'senders': ['prospect@potential.com', 'inquiry@business.org', 'interested.party@company.net']
+        },
+        'technical': {
+            'subjects': [
+                'API Integration Issue',
+                'Bug Report: Login Functionality',
+                'Server Performance Degradation',
+                'Database Connection Error',
+                'Feature Request: Export Functionality'
+            ],
+            'bodies': [
+                'We are experiencing intermittent failures with the REST API integration. The error occurs specifically when attempting to authenticate using OAuth2. Could you please investigate and provide guidance on resolving this issue?',
+                'I need to report a critical bug in the application. Users are unable to log in using their credentials. The error message indicates a timeout issue. This is affecting multiple users and needs immediate attention.',
+                'Our monitoring system has detected a significant performance degradation on the production servers. Response times have increased by 300% over the past hour. Please investigate and advise on immediate actions.'
+            ],
+            'senders': ['developer@company.com', 'tech.support@business.org', 'sysadmin@enterprise.net']
+        },
+        'general': {
+            'subjects': [
+                'Quick Update',
+                'Meeting time confirmation',
+                'Document Review Request',
+                'Schedule Change Notification',
+                'Weekly Status Report'
+            ],
+            'bodies': [
+                'Just wanted to give you a quick update on the project. Everything is proceeding as planned, and we should be able to meet our deadline.',
+                'Can you confirm if 3 PM tomorrow works for our meeting? If not, please suggest an alternative time that suits your schedule.',
+                'I have attached the document for your review. Please take a look when you have a chance and let me know if you have any questions or feedback.'
+            ],
+            'senders': ['team.member@company.com', 'coordinator@office.org', 'assistant@business.net']
+        },
+        'urgent': {
+            'subjects': [
+                'URGENT: Server Down',
+                'Critical: Security Breach Detected',
+                'IMMEDIATE ACTION REQUIRED: Payment Issue',
+                'Emergency: Production Deployment Failed',
+                'URGENT: Client Escalation'
+            ],
+            'bodies': [
+                'Production server is completely down! All services are inaccessible. We need immediate action to restore functionality. Please respond ASAP.',
+                'Our security monitoring has detected unusual activity that may indicate a breach. We need to investigate immediately and take preventive measures.',
+                'A critical payment processing error has occurred affecting multiple transactions. This requires immediate attention to prevent further issues.'
+            ],
+            'senders': ['ops@company.com', 'security.team@business.org', 'emergency.response@critical.net']
+        },
+        'creative': {
+            'subjects': [
+                'Ideas for Company Event',
+                'Brainstorming Session: New Product Names',
+                'Creative Input Needed: Marketing Campaign',
+                'Innovation Workshop Planning',
+                'Team Building Activity Suggestions'
+            ],
+            'bodies': [
+                'We are planning the annual company event and would love your creative input. Do you have any unique ideas for themes, activities, or venues that would make this year memorable?',
+                'Our marketing team is launching a new campaign and we need fresh, creative ideas. What concepts do you think would resonate with our target audience?',
+                'I am organizing an innovation workshop and looking for creative exercises that can help stimulate out-of-the-box thinking. Any suggestions would be greatly appreciated!'
+            ],
+            'senders': ['hr@company.com', 'marketing.team@creative.org', 'events@business.net']
         }
     }
     
@@ -126,6 +186,33 @@ class SyntheticEmailGenerator(EmailGenerator):
         
         if session:
             email_data['session'] = session
+        
+        email = Email.objects.create(**email_data)
+        
+        return email
+    
+    def generate_email(self, session, scenario_type='professional', complexity='medium', metadata=None):
+        """Generate a synthetic email with specified parameters (sync version)"""
+        if scenario_type == "random":
+            scenario_type = random.choice(list(self.TEMPLATES.keys()))
+        
+        if scenario_type not in self.TEMPLATES:
+            scenario_type = "professional"  # fallback
+            
+        template = self.TEMPLATES[scenario_type]
+        
+        email_data = {
+            'session': session,
+            'subject': random.choice(template['subjects']),
+            'body': random.choice(template['bodies']),
+            'sender': random.choice(template['senders']),
+            'scenario_type': scenario_type,
+            'is_synthetic': True
+        }
+        
+        # Add metadata if provided
+        if metadata:
+            email_data['metadata'] = metadata
         
         email = Email.objects.create(**email_data)
         

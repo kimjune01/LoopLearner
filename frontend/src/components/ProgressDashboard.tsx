@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { SystemState } from '../types/state';
-import { OptimizationStatus } from '../services/optimizationService';
+import type { SystemState } from '../types/state';
+import type { OptimizationStatus } from '../services/optimizationService';
 import { optimizationService } from '../services/optimizationService';
 
 export const ProgressDashboard: React.FC = () => {
-  const [systemState, setSystemState] = useState<SystemState | null>(null);
+  const [systemState] = useState<SystemState | null>(null);
   const [optimizationStatus, setOptimizationStatus] = useState<OptimizationStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
