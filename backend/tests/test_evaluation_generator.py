@@ -21,7 +21,8 @@ class EvaluationGeneratorStoryTests(TestCase):
         self.dataset = EvaluationDataset.objects.create(
             session=self.session,
             name="Test Dataset",
-            description="A test evaluation dataset"
+            description="A test evaluation dataset",
+            parameters=["user_name", "product_type", "user_question"]
         )
         self.prompt = SystemPrompt.objects.create(
             session=self.session,
@@ -38,7 +39,7 @@ class EvaluationGeneratorStoryTests(TestCase):
         """
         url = f'/api/evaluations/datasets/{self.dataset.id}/generate-cases/'
         data = {
-            'prompt_id': str(self.prompt.id),
+            'template': 'You are a helpful customer service assistant. Help {user_name} with their {product_type} question: {user_question}',
             'count': 3
         }
         
@@ -48,21 +49,21 @@ class EvaluationGeneratorStoryTests(TestCase):
         self.assertEqual(response.status_code, 200)
         
         response_data = response.json()
-        self.assertEqual(len(response_data['generated_cases']), 3)
+        self.assertEqual(len(response_data['previews']), 3)
         
         # Verify cases have parameter values filled in
-        for case in response_data['generated_cases']:
-            self.assertIn('input_text', case)
-            self.assertIn('expected_output', case)
+        for case in response_data['previews']:
+            self.assertIn('generated_input', case)
+            self.assertIn('generated_output', case)
             self.assertIn('parameters', case)
             self.assertIn('user_name', case['parameters'])
             self.assertIn('product_type', case['parameters'])
             self.assertIn('user_question', case['parameters'])
             
-            # Verify parameters are substituted in input_text
-            self.assertNotIn('{{user_name}}', case['input_text'])
-            self.assertNotIn('{{product_type}}', case['input_text'])
-            self.assertNotIn('{{user_question}}', case['input_text'])
+            # Verify parameters are substituted in generated_input
+            self.assertNotIn('{user_name}', case['generated_input'])
+            self.assertNotIn('{product_type}', case['generated_input'])
+            self.assertNotIn('{user_question}', case['generated_input'])
         
         # Verify cases are NOT saved to database yet
         self.assertEqual(EvaluationCase.objects.filter(dataset=self.dataset).count(), 0)
@@ -74,7 +75,7 @@ class EvaluationGeneratorStoryTests(TestCase):
         """
         url = f'/api/evaluations/datasets/{self.dataset.id}/generate-cases/'
         data = {
-            'prompt_id': str(self.prompt.id),
+            'template': 'You are a helpful customer service assistant. Help {user_name} with their {product_type} question: {user_question}',
             'count': 5
         }
         
@@ -84,14 +85,14 @@ class EvaluationGeneratorStoryTests(TestCase):
         response_data = response.json()
         
         # Verify we get exactly 5 cases
-        self.assertEqual(len(response_data['generated_cases']), 5)
+        self.assertEqual(len(response_data['previews']), 5)
         
         # Verify diversity - parameter values should be different across cases
         user_names = set()
         product_types = set()
         user_questions = set()
         
-        for case in response_data['generated_cases']:
+        for case in response_data['previews']:
             user_names.add(case['parameters']['user_name'])
             product_types.add(case['parameters']['product_type'])
             user_questions.add(case['parameters']['user_question'])

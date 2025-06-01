@@ -9,6 +9,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.shortcuts import get_object_or_404
+from django.db import models
 from core.models import Session, EvaluationDataset, EvaluationCase, SystemPrompt
 from app.services.evaluation_case_generator import EvaluationCaseGenerator
 from app.services.evaluation_dataset_migrator import EvaluationDatasetMigrator
@@ -23,16 +24,48 @@ class EvaluationDatasetListView(View):
     """
     
     def get(self, request):
-        """List datasets (global and session-scoped)"""
+        """List datasets (global and session-scoped) with optional parameter filtering"""
         session_id = request.GET.get('session_id')
+        filter_by_params = request.GET.get('filter_by_params', 'false').lower() == 'true'
         
         if session_id:
             # Get session-specific datasets
             session = get_object_or_404(Session, id=session_id)
-            datasets = EvaluationDataset.objects.filter(session=session)
+            
+            if filter_by_params:
+                # Get active system prompt parameters for this session
+                active_prompt = session.prompts.filter(is_active=True).first()
+                if active_prompt and active_prompt.parameters:
+                    # Find datasets that have matching parameters
+                    datasets = EvaluationDataset.objects.filter(session=session)
+                    # Filter by parameter overlap in Python since JSONField queries can be complex
+                    compatible_datasets = []
+                    for dataset in datasets:
+                        if dataset.parameters:
+                            # Check if there's any overlap between prompt parameters and dataset parameters
+                            overlap = set(active_prompt.parameters) & set(dataset.parameters)
+                            if overlap:
+                                compatible_datasets.append(dataset)
+                        elif not dataset.parameters:
+                            # Include datasets with no parameters as they're universally compatible
+                            compatible_datasets.append(dataset)
+                    datasets = compatible_datasets
+                else:
+                    # No active prompt or no parameters, show datasets with no parameters
+                    datasets = EvaluationDataset.objects.filter(
+                        session=session,
+                        parameters__isnull=True
+                    ) | EvaluationDataset.objects.filter(
+                        session=session,
+                        parameters=[]
+                    )
+                    datasets = list(datasets)
+            else:
+                # Show all session datasets without filtering
+                datasets = EvaluationDataset.objects.filter(session=session)
         else:
-            # Get all global datasets (session=null)
-            datasets = EvaluationDataset.objects.filter(session__isnull=True)
+            # All datasets must be session-scoped - return error if no session_id provided
+            return JsonResponse({'error': 'session_id is required - all datasets are session-scoped'}, status=400)
         
         dataset_data = []
         for dataset in datasets:
@@ -57,7 +90,7 @@ class EvaluationDatasetListView(View):
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON'}, status=400)
         
-        session_id = data.get('session_id')  # Optional for global datasets
+        session_id = data.get('session_id')
         name = data.get('name')
         description = data.get('description', '')
         parameters = data.get('parameters', [])
@@ -66,9 +99,10 @@ class EvaluationDatasetListView(View):
         if not name:
             return JsonResponse({'error': 'name is required'}, status=400)
         
-        session = None
-        if session_id:
-            session = get_object_or_404(Session, id=session_id)
+        if not session_id:
+            return JsonResponse({'error': 'session_id is required - all datasets must be associated with a session'}, status=400)
+        
+        session = get_object_or_404(Session, id=session_id)
         
         dataset = EvaluationDataset.objects.create(
             session=session,
@@ -97,6 +131,8 @@ class EvaluationDatasetDetailView(View):
     """
     Handle dataset details
     GET /api/evaluations/datasets/<id>/
+    PUT /api/evaluations/datasets/<id>/
+    DELETE /api/evaluations/datasets/<id>/
     """
     
     def get(self, request, dataset_id):
@@ -126,6 +162,44 @@ class EvaluationDatasetDetailView(View):
             'average_score': None,  # TODO: Calculate from evaluation runs
             'cases': cases_data
         })
+    
+    def put(self, request, dataset_id):
+        """Update an evaluation dataset"""
+        dataset = get_object_or_404(EvaluationDataset, id=dataset_id)
+        
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        
+        # Update allowed fields
+        if 'name' in data:
+            dataset.name = data['name']
+        if 'description' in data:
+            dataset.description = data['description']
+        if 'parameter_descriptions' in data:
+            dataset.parameter_descriptions = data['parameter_descriptions']
+        
+        dataset.save()
+        
+        return JsonResponse({
+            'id': dataset.id,
+            'name': dataset.name,
+            'description': dataset.description,
+            'parameters': dataset.parameters,
+            'parameter_descriptions': dataset.parameter_descriptions,
+            'created_at': dataset.created_at.isoformat(),
+            'updated_at': dataset.updated_at.isoformat(),
+            'session_id': str(dataset.session.id) if dataset.session else None,
+            'case_count': dataset.cases.count(),
+            'average_score': None
+        })
+    
+    def delete(self, request, dataset_id):
+        """Delete an evaluation dataset"""
+        dataset = get_object_or_404(EvaluationDataset, id=dataset_id)
+        dataset.delete()
+        return JsonResponse({'message': 'Dataset deleted successfully'}, status=200)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -255,7 +329,7 @@ class EvaluationCaseGeneratorView(View):
         self.case_generator = EvaluationCaseGenerator()
     
     def post(self, request, dataset_id):
-        """Generate evaluation cases preview (not saved to database)"""
+        """Generate evaluation cases (immediately persisted to database)"""
         dataset = get_object_or_404(EvaluationDataset, id=dataset_id)
         
         try:
@@ -263,26 +337,110 @@ class EvaluationCaseGeneratorView(View):
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON'}, status=400)
         
-        prompt_id = data.get('prompt_id')
+        template = data.get('template')
         count = data.get('count', 5)
-        
-        if not prompt_id:
-            return JsonResponse({'error': 'prompt_id is required'}, status=400)
+        use_session_prompt = data.get('use_session_prompt', False)
+        prompt_id = data.get('prompt_id')  # Alternative to use_session_prompt
+        generate_output_variations = data.get('generate_output_variations', False)
+        variations_count = data.get('variations_count', 3)
+        persist_immediately = data.get('persist_immediately', False)  # Default to preview mode for backward compatibility
         
         if count > 20:  # Limit to prevent abuse
             return JsonResponse({'error': 'Maximum 20 cases per generation'}, status=400)
         
-        prompt = get_object_or_404(SystemPrompt, id=prompt_id)
-        
         try:
-            generated_cases = self.case_generator.generate_cases_preview(prompt, count)
+            # Determine which prompt to use
+            active_prompt = None
+            generation_method = None
             
-            return JsonResponse({
-                'generated_cases': generated_cases,
-                'prompt_content': prompt.content,
-                'dataset_id': dataset.id,
-                'count': len(generated_cases)
-            })
+            if prompt_id:
+                # Use specific prompt by ID
+                from core.models import SystemPrompt
+                active_prompt = get_object_or_404(SystemPrompt, id=prompt_id)
+                generation_method = 'prompt_id'
+            elif use_session_prompt and dataset.session:
+                # Use session's active prompt
+                active_prompt = dataset.session.prompts.filter(is_active=True).first()
+                if not active_prompt:
+                    return JsonResponse({'error': 'No active prompt found in session'}, status=400)
+                generation_method = 'session_prompt'
+            
+            if active_prompt:
+                # Use prompt-based generation
+                if generate_output_variations:
+                    # Use new method for multiple output variations
+                    generated_cases = self.case_generator.generate_cases_preview_with_variations(
+                        active_prompt, count, enable_variations=True, 
+                        dataset=dataset, persist_immediately=persist_immediately
+                    )
+                else:
+                    # Use existing method for backward compatibility
+                    generated_cases = self.case_generator.generate_cases_preview(
+                        active_prompt, count,
+                        dataset=dataset, persist_immediately=persist_immediately
+                    )
+            else:
+                # Use template-based generation (existing behavior)
+                if not template:
+                    return JsonResponse({'error': 'template or prompt_id is required'}, status=400)
+                generated_cases = self.case_generator.generate_cases_from_template(
+                    template, dataset.parameters, count,
+                    dataset=dataset, persist_immediately=persist_immediately
+                )
+                generation_method = 'template'
+            
+            # Store generated cases in cache only if not persisted
+            persisted_cases = []
+            preview_cases = []
+            
+            for case in generated_cases:
+                if case.get('persisted', False):
+                    persisted_cases.append(case)
+                else:
+                    preview_cases.append(case)
+                    _preview_cases_cache[case['preview_id']] = case
+            
+            # Maintain backward compatibility with different response formats
+            if generation_method == 'template':
+                # Template-based generation uses 'previews' key for backward compatibility
+                response_data = {
+                    'previews': generated_cases,
+                    'dataset_id': dataset.id,
+                    'count': len(generated_cases),
+                    'template': template,
+                    'generation_method': 'template',
+                    'supports_variations': False,
+                    'persist_immediately': persist_immediately,
+                    'persisted_count': len(persisted_cases)
+                }
+            else:
+                # Prompt-based generation uses 'generated_cases' key for backward compatibility
+                response_data = {
+                    'generated_cases': generated_cases,
+                    'dataset_id': dataset.id,
+                    'count': len(generated_cases),
+                    'generation_method': generation_method,
+                    'supports_variations': True,
+                    'persist_immediately': persist_immediately,
+                    'persisted_count': len(persisted_cases)
+                }
+                
+                # Include prompt context
+                if active_prompt:
+                    response_data.update({
+                        'prompt_content': active_prompt.content,
+                        'prompt_parameters': active_prompt.parameters or [],
+                    })
+                    
+                if dataset.session:
+                    response_data.update({
+                        'session_id': str(dataset.session.id),
+                        'session_name': dataset.session.name,
+                    })
+            
+            # Return appropriate status code based on whether cases were persisted
+            status_code = 201 if persisted_cases else 200
+            return JsonResponse(response_data, status=status_code)
             
         except Exception as e:
             return JsonResponse({'error': f'Generation failed: {str(e)}'}, status=500)
@@ -304,30 +462,145 @@ class EvaluationCaseSelectionView(View):
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON'}, status=400)
         
+        # Support multiple formats: preview_ids, cases with selections, and selected_cases
+        preview_ids = data.get('preview_ids', [])
+        cases_data = data.get('cases', [])
         selected_cases = data.get('selected_cases', [])
         
-        if not selected_cases:
+        if not preview_ids and not cases_data and not selected_cases:
             return JsonResponse({'error': 'No cases selected'}, status=400)
         
         created_cases = []
         case_ids = []
+        added_cases_response = []
         
         try:
-            for case_data in selected_cases:
-                case = EvaluationCase.objects.create(
-                    dataset=dataset,
-                    input_text=case_data['input_text'],
-                    expected_output=case_data['expected_output'],
-                    context=case_data.get('parameters', {})  # Store parameters in context
-                )
-                created_cases.append(case)
-                case_ids.append(case.id)
+            # Handle selected_cases format (test compatibility)
+            if selected_cases:
+                for case_data in selected_cases:
+                    # Extract case data for direct storage
+                    input_text = case_data.get('input_text')
+                    expected_output = case_data.get('expected_output')
+                    parameters = case_data.get('parameters', {})
+                    
+                    if input_text and expected_output:
+                        case = EvaluationCase.objects.create(
+                            dataset=dataset,
+                            input_text=input_text,
+                            expected_output=expected_output,
+                            context=parameters
+                        )
+                        created_cases.append(case)
+                        case_ids.append(case.id)
             
-            return JsonResponse({
+            # Handle legacy format for backward compatibility
+            elif preview_ids:
+                for preview_id in preview_ids:
+                    # Get case data from cache
+                    case_data = _preview_cases_cache.get(preview_id)
+                    if not case_data:
+                        continue  # Skip missing cases
+                    
+                    # Handle both session-based and template-based generation formats
+                    if 'input_text' in case_data:
+                        # Session-based generation format
+                        input_text = case_data['input_text']
+                        expected_output = case_data['expected_output']
+                    else:
+                        # Template-based generation format
+                        input_text = case_data['generated_input']
+                        expected_output = case_data['generated_output']
+                    
+                    case = EvaluationCase.objects.create(
+                        dataset=dataset,
+                        input_text=input_text,
+                        expected_output=expected_output,
+                        context=case_data.get('parameters', {})  # Store parameters in context
+                    )
+                    created_cases.append(case)
+                    case_ids.append(case.id)
+                    
+                    # Remove from cache after adding to dataset
+                    del _preview_cases_cache[preview_id]
+            
+            # Handle new format with output selection
+            if cases_data:
+                # First, validate all cases before creating any
+                validated_cases = []
+                for case_data in cases_data:
+                    preview_id = case_data.get('preview_id')
+                    input_text = case_data.get('input_text')
+                    parameters = case_data.get('parameters', {})
+                    selected_output_index = case_data.get('selected_output_index')
+                    custom_output = case_data.get('custom_output')
+                    output_variations = case_data.get('output_variations', [])
+                    
+                    # Validation
+                    if not preview_id or not input_text:
+                        return JsonResponse({'error': 'preview_id and input_text are required for each case'}, status=400)
+                    
+                    # Must have either selected_output_index OR custom_output, but not both
+                    if selected_output_index is not None and custom_output is not None:
+                        return JsonResponse({'error': 'Cannot specify both selected_output_index and custom_output'}, status=400)
+                    
+                    if selected_output_index is None and custom_output is None:
+                        return JsonResponse({'error': 'Must specify either selected_output_index or custom_output'}, status=400)
+                    
+                    # Determine the expected output
+                    if custom_output is not None:
+                        expected_output = custom_output
+                    else:
+                        # Validate selected_output_index
+                        if selected_output_index < 0 or selected_output_index >= len(output_variations):
+                            return JsonResponse({'error': f'selected_output_index {selected_output_index} is out of range'}, status=400)
+                        
+                        expected_output = output_variations[selected_output_index]['text']
+                    
+                    # Store validated case data
+                    validated_cases.append({
+                        'preview_id': preview_id,
+                        'input_text': input_text,
+                        'expected_output': expected_output,
+                        'parameters': parameters
+                    })
+                
+                # If all cases are valid, create them atomically
+                from django.db import transaction
+                with transaction.atomic():
+                    for case_data in validated_cases:
+                        case = EvaluationCase.objects.create(
+                            dataset=dataset,
+                            input_text=case_data['input_text'],
+                            expected_output=case_data['expected_output'],
+                            context=case_data['parameters']
+                        )
+                        created_cases.append(case)
+                        case_ids.append(case.id)
+                        
+                        # Prepare response data
+                        added_cases_response.append({
+                            'id': case.id,
+                            'input_text': case.input_text,
+                            'expected_output': case.expected_output,
+                            'context': case.context,
+                            'preview_id': case_data['preview_id']
+                        })
+                        
+                        # Remove from cache if exists
+                        if case_data['preview_id'] in _preview_cases_cache:
+                            del _preview_cases_cache[case_data['preview_id']]
+            
+            response_data = {
                 'added_count': len(created_cases),
                 'case_ids': case_ids,
                 'dataset_id': dataset.id
-            }, status=201)
+            }
+            
+            # Include detailed case data for new format
+            if cases_data:
+                response_data['added_cases'] = added_cases_response
+            
+            return JsonResponse(response_data, status=201)
             
         except Exception as e:
             return JsonResponse({'error': f'Failed to save cases: {str(e)}'}, status=500)

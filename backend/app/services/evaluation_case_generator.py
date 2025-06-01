@@ -48,13 +48,15 @@ class EvaluationCaseGenerator:
             'SENDER_INFO': self._generate_sender_info,
         }
     
-    def generate_cases_preview(self, prompt: SystemPrompt, count: int = 5) -> List[Dict[str, Any]]:
+    def generate_cases_preview(self, prompt: SystemPrompt, count: int = 5, dataset=None, persist_immediately: bool = False) -> List[Dict[str, Any]]:
         """
-        Generate evaluation cases for preview (not saved to database)
+        Generate evaluation cases for preview (optionally saved to database)
         
         Args:
             prompt: SystemPrompt with parameters to generate cases for
             count: Number of cases to generate
+            dataset: EvaluationDataset to save cases to (if persist_immediately=True)
+            persist_immediately: If True, save cases to database immediately
             
         Returns:
             List of generated case dictionaries with preview_id, input_text, expected_output, parameters
@@ -81,6 +83,72 @@ class EvaluationCaseGenerator:
                 'parameters': parameter_values,
                 'prompt_content': prompt.content
             }
+            
+            # Persist immediately if requested
+            if persist_immediately and dataset:
+                from core.models import EvaluationCase
+                db_case = EvaluationCase.objects.create(
+                    dataset=dataset,
+                    input_text=input_text,
+                    expected_output=expected_output,
+                    context=parameter_values  # Store parameters in context
+                )
+                case['id'] = db_case.id  # Add database ID to case
+                case['persisted'] = True
+            else:
+                case['persisted'] = False
+            
+            generated_cases.append(case)
+        
+        return generated_cases
+    
+    def generate_cases_from_template(self, template: str, parameters: List[str], count: int = 5, dataset=None, persist_immediately: bool = False) -> List[Dict[str, Any]]:
+        """
+        Generate evaluation cases from a template string
+        
+        Args:
+            template: Template string with {parameter} placeholders
+            parameters: List of parameter names expected in the template
+            count: Number of cases to generate
+            dataset: EvaluationDataset to save cases to (if persist_immediately=True)
+            persist_immediately: If True, save cases to database immediately
+            
+        Returns:
+            List of generated case dictionaries with preview_id, generated_input, generated_output, parameters
+        """
+        generated_cases = []
+        
+        for i in range(count):
+            # Generate parameter values
+            parameter_values = self._generate_parameter_values(parameters)
+            
+            # Substitute parameters in template to create input text
+            input_text = self._substitute_parameters(template, parameter_values)
+            
+            # Generate expected output using LLM
+            expected_output = self._generate_expected_output_from_template(input_text, template)
+            
+            case = {
+                'preview_id': str(uuid.uuid4()),  # Temporary ID for frontend tracking
+                'generated_input': input_text,
+                'generated_output': expected_output,
+                'parameters': parameter_values,
+                'template': template
+            }
+            
+            # Persist immediately if requested
+            if persist_immediately and dataset:
+                from core.models import EvaluationCase
+                db_case = EvaluationCase.objects.create(
+                    dataset=dataset,
+                    input_text=input_text,
+                    expected_output=expected_output,
+                    context=parameter_values  # Store parameters in context
+                )
+                case['id'] = db_case.id  # Add database ID to case
+                case['persisted'] = True
+            else:
+                case['persisted'] = False
             
             generated_cases.append(case)
         
@@ -213,7 +281,7 @@ class EvaluationCaseGenerator:
         """Substitute parameter values in content"""
         result = content
         for param, value in parameter_values.items():
-            result = result.replace(f'{{{{{param}}}}}', value)
+            result = result.replace(f'{{{param}}}', value)
         return result
     
     def _generate_expected_output(self, input_text: str, prompt_template: str) -> str:
@@ -227,6 +295,189 @@ Given this prompt template: {prompt_template}
 And this specific input: {input_text}
 
 Generate a high-quality, helpful response that a customer service assistant should provide. Make it professional, accurate, and customer-focused. Keep it concise but complete.
+
+Response:"""
+            
+            # Run async method in sync context
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            response = loop.run_until_complete(self.llm_provider.generate(
+                prompt=generation_prompt,
+                max_tokens=150,
+                temperature=0.7
+            ))
+            
+            return response.strip()
+            
+        except Exception as e:
+            # Fallback to a generic response if LLM fails
+            return f"Thank you for your inquiry. I'll be happy to help you with your request."
+    
+    def generate_multiple_outputs(self, input_text: str, prompt_template: str, 
+                                num_variations: int = 3, styles: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """Generate multiple output variations for a single input"""
+        if styles is None:
+            styles = ['formal', 'friendly', 'detailed']
+        
+        outputs = []
+        
+        # Style-specific prompts
+        style_instructions = {
+            'formal': "Use a professional, formal tone with proper business language.",
+            'friendly': "Use a warm, conversational tone while remaining professional.",
+            'detailed': "Provide a comprehensive response with specific details and steps.",
+            'empathetic': "Show understanding and empathy for the customer's situation.",
+            'solution-focused': "Focus directly on solving the problem with clear action steps.",
+            'explanatory': "Explain the reasoning behind your response and educate the customer."
+        }
+        
+        for i, style in enumerate(styles[:num_variations]):
+            try:
+                # Create style-specific prompt
+                style_instruction = style_instructions.get(style, style_instructions['formal'])
+                
+                generation_prompt = f"""You are helping create evaluation cases for a customer service AI system.
+
+Given this prompt template: {prompt_template}
+
+And this specific input: {input_text}
+
+Generate a high-quality, helpful response that a customer service assistant should provide. 
+{style_instruction}
+
+Make it professional, accurate, and customer-focused. Keep it concise but complete.
+
+Response:"""
+                
+                # Run async method in sync context
+                import asyncio
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
+                # Use different temperature for variety
+                temperature = 0.6 + (i * 0.2)  # 0.6, 0.8, 1.0
+                
+                response = loop.run_until_complete(self.llm_provider.generate(
+                    prompt=generation_prompt,
+                    max_tokens=200,
+                    temperature=min(temperature, 1.0)
+                ))
+                
+                outputs.append({
+                    'index': i,
+                    'text': response.strip(),
+                    'style': style
+                })
+                
+            except Exception as e:
+                # Fallback for this variation
+                fallback_responses = {
+                    'formal': "Thank you for contacting us. I'll be happy to assist you with your inquiry. Please allow me to review your request and provide you with the appropriate assistance.",
+                    'friendly': "Hi there! Thanks for reaching out. I completely understand your concern and I'm here to help. Let me look into this for you right away.",
+                    'detailed': "Thank you for your inquiry. I'll be happy to help you with your request. Let me provide you with a comprehensive solution to address your concern.",
+                    'empathetic': "I understand this situation must be frustrating for you. I want to help resolve this matter as quickly as possible and ensure you have a positive experience.",
+                    'solution-focused': "Let me help you resolve this issue right away. I'll walk you through the steps needed to address your concern.",
+                    'explanatory': "I'd be happy to explain this process and help you understand how we can best assist you with your request."
+                }
+                
+                outputs.append({
+                    'index': i,
+                    'text': fallback_responses.get(style, fallback_responses['formal']),
+                    'style': style
+                })
+        
+        return outputs
+    
+    def generate_cases_preview_with_variations(self, prompt: SystemPrompt, count: int = 5, 
+                                              enable_variations: bool = True, dataset=None, persist_immediately: bool = False) -> List[Dict[str, Any]]:
+        """Generate evaluation cases with multiple output variations for human selection"""
+        if not prompt.parameters:
+            prompt.extract_parameters()
+        
+        generated_cases = []
+        
+        for i in range(count):
+            # Generate parameter values
+            parameter_values = self._generate_parameter_values(prompt.parameters)
+            
+            # Substitute parameters in prompt content to create input text
+            input_text = self._substitute_parameters(prompt.content, parameter_values)
+            
+            case = {
+                'preview_id': str(uuid.uuid4()),
+                'input_text': input_text,
+                'parameters': parameter_values,
+                'prompt_content': prompt.content
+            }
+            
+            if enable_variations:
+                # Generate multiple output variations
+                output_variations = self.generate_multiple_outputs(
+                    input_text=input_text,
+                    prompt_template=prompt.content,
+                    num_variations=3
+                )
+                case['output_variations'] = output_variations
+                case['selected_output_index'] = None
+                case['custom_output'] = None
+                
+                # For immediate persistence with variations, use first variation as default
+                if persist_immediately and dataset and output_variations:
+                    from core.models import EvaluationCase
+                    default_output = output_variations[0]['text']
+                    db_case = EvaluationCase.objects.create(
+                        dataset=dataset,
+                        input_text=input_text,
+                        expected_output=default_output,
+                        context=parameter_values
+                    )
+                    case['id'] = db_case.id
+                    case['persisted'] = True
+                    case['selected_output_index'] = 0  # Mark first variation as selected
+                else:
+                    case['persisted'] = False
+            else:
+                # Single output for backward compatibility
+                expected_output = self._generate_expected_output(input_text, prompt.content)
+                case['expected_output'] = expected_output
+                
+                # Persist immediately if requested
+                if persist_immediately and dataset:
+                    from core.models import EvaluationCase
+                    db_case = EvaluationCase.objects.create(
+                        dataset=dataset,
+                        input_text=input_text,
+                        expected_output=expected_output,
+                        context=parameter_values
+                    )
+                    case['id'] = db_case.id
+                    case['persisted'] = True
+                else:
+                    case['persisted'] = False
+            
+            generated_cases.append(case)
+        
+        return generated_cases
+    
+    def _generate_expected_output_from_template(self, input_text: str, template: str) -> str:
+        """Generate expected output for template-based generation"""
+        try:
+            # Create a prompt for the LLM to generate an appropriate response
+            generation_prompt = f"""You are helping create evaluation cases for a customer service AI system.
+
+Given this template: {template}
+
+And this specific input scenario: {input_text}
+
+Generate a high-quality, helpful response that a customer service assistant should provide for this scenario. Make it professional, accurate, and customer-focused. Keep it concise but complete.
 
 Response:"""
             
