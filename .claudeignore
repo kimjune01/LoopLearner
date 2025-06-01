@@ -1,0 +1,188 @@
+# Dependencies and package files
+node_modules/
+*/node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+*.lock
+
+# Build outputs and dist files
+dist/
+build/
+out/
+.next/
+.nuxt/
+.vite/
+.parcel-cache/
+
+# Database files
+*.sqlite3
+*.db
+*.sqlite
+db.sqlite3
+
+# Virtual environments
+venv/
+env/
+.env/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Cache directories
+.cache/
+.npm/
+.yarn/
+.pnpm/
+.eslintcache
+.stylelintcache
+
+# Test coverage
+coverage/
+.nyc_output/
+.coverage
+htmlcov/
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# TypeScript build info
+*.tsbuildinfo
+.tsbuildinfo
+
+# Frontend specific
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+backend/frontend/node_modules/
+backend/frontend/dist/
+
+# Python specific
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Git files
+.git/
+.gitignore
+
+# Large media files
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+*.mkv
+*.m4v
+*.3gp
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
+*.wma
+*.m4a
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.tga
+*.svg
+*.ico
+*.webp
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.bz2
+
+# Configuration files that might contain secrets
+.env
+.env.local
+.env.production
+.env.staging
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Documentation that's auto-generated or not essential for development
+CHANGELOG.md
+HISTORY.md
+AUTHORS
+CONTRIBUTORS
+LICENSE
+*.md.backup
+
+# Backup files
+*.backup
+*.bak
+*.orig
+*~
+
+# Machine learning models and data
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.hdf5
+*.pb
+*.onnx
+*.model
+*.weights
+data/
+datasets/
+models/
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Generated files
+generated/
+auto-generated/
+codegen/
