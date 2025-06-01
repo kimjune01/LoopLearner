@@ -9,7 +9,7 @@ from typing import Dict, Any, List
 from django.db import transaction
 
 from core.models import Session, UserPreference
-from .session_importer import SessionImporter
+from .promptlab_importer import PromptLabImporter
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class SystemImporter:
     """Service for importing complete system state including multiple sessions"""
     
     def __init__(self):
-        self.session_importer = SessionImporter()
+        self.promptlab_importer = PromptLabImporter()
         self.logger = logging.getLogger(__name__)
     
     def import_system_state(
@@ -63,7 +63,7 @@ class SystemImporter:
             if 'sessions' in system_data:
                 for session_data in system_data['sessions']:
                     try:
-                        # Format session data for SessionImporter
+                        # Format session data for PromptLabImporter
                         formatted_data = {
                             'session': session_data,
                             'prompts': session_data.get('prompts', []),
@@ -72,7 +72,7 @@ class SystemImporter:
                             'version': system_data.get('version', '1.0')
                         }
                         
-                        self.session_importer.import_session(
+                        self.promptlab_importer.import_session(
                             formatted_data, 
                             handle_conflicts='rename'
                         )

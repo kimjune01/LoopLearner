@@ -71,9 +71,9 @@ class PromptLabImportTests(TestCase):
     
     def test_import_session_from_export_data(self):
         """Test importing a  from exported JSON data"""
-        from app.services.prompt_lab_importer import PromptLabImporter
+        from app.services.promptlab_importer import PromptLabImporter
         
-        # First export the prompt lab
+        # First export the prompt_lab
         export_data = {
             'session': {
                 'name': 'Imported PromptLab',
@@ -172,16 +172,16 @@ class PromptLabImportTests(TestCase):
         self.assertFalse(email.is_synthetic)
     
     def test_import_session_handles_conflicts(self):
-        """Test that prompt lab import handles conflicts appropriately"""
-        from app.services.prompt_lab_importer import PromptLabImporter
+        """Test that prompt_lab import handles conflicts appropriately"""
+        from app.services.promptlab_importer import PromptLabImporter
         
-        # Create conflicting prompt lab with same name
-        PromptLab.objects.create(name="Conflict PromptLab", description="Existing prompt lab")
+        # Create conflicting prompt_lab with same name
+        PromptLab.objects.create(name="Conflict PromptLab", description="Existing prompt_lab")
         
         export_data = {
             'session': {
                 'name': 'Conflict PromptLab',
-                'description': 'Imported prompt lab with same name',
+                'description': 'Imported prompt_lab with same name',
             },
             'prompts': [],
             'preferences': [],
@@ -193,13 +193,13 @@ class PromptLabImportTests(TestCase):
         importer = PromptLabImporter()
         imported_session = importer.import_session(export_data, handle_conflicts='rename')
         
-        # Should create prompt lab with modified name
+        # Should create prompt_lab with modified name
         self.assertTrue(imported_session.name.startswith('Conflict PromptLab'))
         self.assertNotEqual(imported_session.name, 'Conflict PromptLab')
     
     def test_import_session_validates_data(self):
-        """Test that prompt lab import validates input data"""
-        from app.services.prompt_lab_importer import PromptLabImporter, ImportValidationError
+        """Test that prompt_lab import validates input data"""
+        from app.services.promptlab_importer import PromptLabImporter, ImportValidationError
         
         importer = PromptLabImporter()
         
@@ -228,11 +228,11 @@ class PromptLabImportTests(TestCase):
     
     def test_import_preserves_relationships(self):
         """Test that import preserves all relationships between entities"""
-        from app.services.prompt_lab_importer import PromptLabImporter
+        from app.services.promptlab_importer import PromptLabImporter
         
         # Complex export data with relationships
         export_data = {
-            'prompt lab': {
+            'prompt_lab': {
                 'name': 'Complex PromptLab',
                 'description': 'Session with all relationships',
             },
@@ -265,17 +265,17 @@ class PromptLabImportTests(TestCase):
         }
         
         importer = PromptLabImporter()
-        imported_prompt lab = importer.import_prompt_lab(export_data)
+        imported_prompt_lab = importer.import_session(export_data)
         
-        # Verify all entities are connected to the prompt lab
-        prompt = imported_prompt lab.prompts.first()
-        self.assertEqual(prompt.prompt lab, imported_prompt lab)
+        # Verify all entities are connected to the prompt_lab
+        prompt = imported_prompt_lab.prompts.first()
+        self.assertEqual(prompt.prompt_lab, imported_prompt_lab)
         
-        preference = imported_prompt lab.preferences.first()
-        self.assertEqual(preference.prompt lab, imported_prompt lab)
+        preference = imported_prompt_lab.preferences.first()
+        self.assertEqual(preference.prompt_lab, imported_prompt_lab)
         
-        email = imported_prompt lab.emails.first()
-        self.assertEqual(email., imported_session)
+        email = imported_prompt_lab.emails.first()
+        self.assertEqual(email.prompt_lab, imported_prompt_lab)
 
 
 class PromptLabImportAPITests(APITestCase):
@@ -320,9 +320,9 @@ class PromptLabImportAPITests(APITestCase):
     
     def test_prompt_lab_import_api_validation_error(self):
         """Test API validation for invalid import data"""
-        url = reverse('prompt lab-import')
+        url = reverse('prompt_lab-import')
         
-        # Invalid data - missing prompt lab info
+        # Invalid data - missing prompt_lab info
         response = self.client.post(url, {}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         
@@ -342,7 +342,7 @@ class PromptLabImportAPITests(APITestCase):
         import_data = {
             'session': {
                 'name': 'Conflict Test',
-                'description': 'Imported prompt lab',
+                'description': 'Imported prompt_lab',
             },
             'prompts': [],
             'preferences': [],
@@ -379,7 +379,7 @@ class EnhancedSystemImportTests(TestCase):
             'prompt_labs': [
                 {
                     'name': 'Session 1',
-                    'description': 'First prompt lab',
+                    'description': 'First prompt_lab',
                     'prompts': [
                         {
                             'version': 1,
@@ -393,7 +393,7 @@ class EnhancedSystemImportTests(TestCase):
                 },
                 {
                     'name': 'Session 2', 
-                    'description': 'Second prompt lab',
+                    'description': 'Second prompt_lab',
                     'prompts': [
                         {
                             'version': 1,
@@ -413,11 +413,11 @@ class EnhancedSystemImportTests(TestCase):
         importer = SystemImporter()
         result = importer.import_system_state(system_data)
         
-        # Verify both prompt labs were imported
-        self.assertEqual(result['imported_prompt labs'], 2)
+        # Verify both prompt_labs were imported
+        self.assertEqual(result['imported_prompt_labs'], 2)
         self.assertEqual(result['imported_global_preferences'], 1)
         
-        # Check prompt labs exist
+        # Check prompt_labs exist
         prompt_lab1 = PromptLab.objects.filter(name='Session 1').first()
         prompt_lab2 = PromptLab.objects.filter(name=' 2').first()
         
@@ -491,7 +491,7 @@ class ImportValidationTests(TestCase):
     
     def test_validates_export_format_version(self):
         """Test that import validates export format version"""
-        from app.services.prompt_lab_importer import PromptLabImporter, ImportValidationError
+        from app.services.promptlab_importer import PromptLabImporter, ImportValidationError
         
         importer = PromptLabImporter()
         
@@ -503,19 +503,19 @@ class ImportValidationTests(TestCase):
     
     def test_validates_required_fields(self):
         """Test validation of required fields in import data"""
-        from app.services.prompt_lab_importer import PromptLabImporter, ImportValidationError
+        from app.services.promptlab_importer import PromptLabImporter, ImportValidationError
         
         importer = PromptLabImporter()
         
-        # Test missing prompt lab data
+        # Test missing prompt_lab data
         with self.assertRaises(ImportValidationError) as cm:
-            importer.import_prompt_lab({'version': '1.0'})
+            importer.import_session({'version': '1.0'})
         
-        self.assertIn('prompt lab', str(cm.exception))
+        self.assertIn('prompt_lab', str(cm.exception))
         
-        # Test missing prompt lab name
+        # Test missing prompt_lab name
         with self.assertRaises(ImportValidationError) as cm:
-            importer.import_prompt_lab({
+            importer.import_session({
                 '': {'description': 'No name'},
                 'version': '1.0'
             })
@@ -524,13 +524,13 @@ class ImportValidationTests(TestCase):
     
     def test_validates_data_types(self):
         """Test validation of data types in import data"""
-        from app.services.prompt_lab_importer import PromptLabImporter, ImportValidationError
+        from app.services.promptlab_importer import PromptLabImporter, ImportValidationError
         
         importer = PromptLabImporter()
         
         # Test invalid prompt data
         with self.assertRaises(ImportValidationError):
-            importer.import_prompt_lab({
+            importer.import_session({
                 '': {'name': 'Test'},
                 'prompts': [
                     {
@@ -546,7 +546,7 @@ class ImportValidationTests(TestCase):
     
     def test_handles_corrupted_data(self):
         """Test handling of corrupted or malformed import data"""
-        from app.services.prompt_lab_importer import PromptLabImporter, ImportValidationError
+        from app.services.promptlab_importer import PromptLabImporter, ImportValidationError
         
         importer = PromptLabImporter()
         

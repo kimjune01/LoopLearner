@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from django.db.models import Count, Q
 
 from core.models import (
-    Session, SystemPrompt, UserPreference, Email, Draft, 
-    UserFeedback, SessionConfidence, ExtractedPreference
+    PromptLab, SystemPrompt, UserPreference, Email, Draft, 
+    UserFeedback, PromptLabConfidence, ExtractedPreference
 )
 from .email_generator import SyntheticEmailGenerator
 from .confidence_calculator import ConfidenceCalculator
@@ -55,25 +55,25 @@ class ColdStartManager:
         self.meta_prompt_manager = MetaPromptManager()
         self.logger = logging.getLogger(__name__)
     
-    def initialize_cold_start(self, session: Session) -> ColdStartResult:
+    def initialize_cold_start(self, prompt_lab: PromptLab) -> ColdStartResult:
         """
         Initialize cold start process for a new session
         
         Args:
-            session: The session to initialize
+            session: The prompt_lab to initialize
             
         Returns:
             ColdStartResult with status and email count
         """
         try:
             # Generate strategic synthetic emails
-            email_specs = self.generate_strategic_emails(session)
+            email_specs = self.generate_strategic_emails(prompt_lab)
             
             # Create the emails in the database
             emails_created = 0
             for spec in email_specs:
                 email = self.email_generator.generate_email(
-                    session=session,
+                    prompt_lab=prompt_lab,
                     scenario_type=spec['scenario_type'],
                     complexity=spec.get('complexity', 'medium'),
                     metadata=spec.get('metadata', {})
@@ -85,7 +85,7 @@ class ColdStartManager:
                 
                 emails_created += 1
             
-            self.logger.info(f"Cold start initialized for session {session.id} with {emails_created} emails")
+            self.logger.info(f"Cold start initialized for prompt_lab {prompt_lab.id} with {emails_created} emails")
             
             return ColdStartResult(
                 success=True,
@@ -93,14 +93,14 @@ class ColdStartManager:
             )
             
         except Exception as e:
-            self.logger.error(f"Failed to initialize cold start for session {session.id}: {str(e)}")
+            self.logger.error(f"Failed to initialize cold start for prompt_lab {prompt_lab.id}: {str(e)}")
             return ColdStartResult(
                 success=False,
                 emails_generated=0,
                 error_message=str(e)
             )
     
-    def generate_strategic_emails(self, session: Session) -> List[Dict[str, Any]]:
+    def generate_strategic_emails(self, prompt_lab: PromptLab) -> List[Dict[str, Any]]:
         """
         Generate strategic email specifications to probe different preferences
         
@@ -157,7 +157,7 @@ class ColdStartManager:
         
         return email_specs
     
-    def analyze_cold_start_feedback(self, session: Session) -> Dict[str, str]:
+    def analyze_cold_start_feedback(self, prompt_lab: PromptLab) -> Dict[str, str]:
         """
         Analyze feedback from cold start emails to learn preferences
         
@@ -167,7 +167,7 @@ class ColdStartManager:
         # Get feedback on cold start emails
         # We consider the first synthetic emails as cold start emails
         cold_start_emails = Email.objects.filter(
-            session=session,
+            prompt_lab=prompt_lab,
             is_synthetic=True
         ).order_by('created_at')[:10]  # First 10 synthetic emails
         
@@ -224,17 +224,17 @@ class ColdStartManager:
                 preferences['formality'] = 'casual'
         
         # Use preference extractor for additional insights
-        extracted = self.preference_extractor.extract_all_preferences(session)
+        extracted = self.preference_extractor.extract_all_preferences(prompt_lab)
         
         for pref in extracted:
             if pref.get('confidence', 0) > 0.7:  # High confidence preferences
                 if pref.get('category') and pref.get('text'):
                     preferences[pref['category']] = pref['text']
         
-        self.logger.info(f"Learned preferences for session {session.id}: {preferences}")
+        self.logger.info(f"Learned preferences for prompt_lab {prompt_lab.id}: {preferences}")
         return preferences
     
-    def apply_learned_preferences(self, session: Session, preferences: Dict[str, str]) -> Optional[SystemPrompt]:
+    def apply_learned_preferences(self, prompt_lab: PromptLab, preferences: Dict[str, str]) -> Optional[SystemPrompt]:
         """
         Apply learned preferences to create an improved system prompt
         
@@ -246,7 +246,7 @@ class ColdStartManager:
         
         # Get current active prompt
         current_prompt = SystemPrompt.objects.filter(
-            session=session,
+            prompt_lab=prompt_lab,
             is_active=True
         ).first()
         
@@ -289,7 +289,7 @@ class ColdStartManager:
         
         # Create new prompt version
         new_prompt = SystemPrompt.objects.create(
-            session=session,
+            prompt_lab=prompt_lab,
             content=enhanced_content,
             version=current_prompt.version + 1,
             is_active=True,
@@ -303,7 +303,7 @@ class ColdStartManager:
         # Store preferences
         for key, value in preferences.items():
             UserPreference.objects.update_or_create(
-                session=session,
+                prompt_lab=prompt_lab,
                 key=key,
                 defaults={
                     'value': value,
@@ -312,10 +312,10 @@ class ColdStartManager:
                 }
             )
         
-        self.logger.info(f"Applied learned preferences to create prompt v{new_prompt.version} for session {session.id}")
+        self.logger.info(f"Applied learned preferences to create prompt v{new_prompt.version} for prompt_lab {prompt_lab.id}")
         return new_prompt
     
-    def should_allow_optimization(self, session: Session) -> bool:
+    def should_allow_optimization(self, prompt_lab: PromptLab) -> bool:
         """
         Check if optimization should be allowed based on cold start status
         
@@ -323,18 +323,18 @@ class ColdStartManager:
             True if optimization can proceed, False if still in cold start
         """
         # Check if cold start is complete
-        if not self.is_cold_start_complete(session):
+        if not self.is_cold_start_complete(prompt_lab):
             return False
         
         # Check confidence levels
-        confidence = SessionConfidence.objects.filter(
-            session=session
+        confidence = PromptLabConfidence.objects.filter(
+            prompt_lab=prompt_lab
         ).order_by('-created_at').first()
         
         if not confidence:
             # Calculate current confidence
-            user_conf = self.confidence_calculator.calculate_user_confidence(session)
-            system_conf = self.confidence_calculator.calculate_system_confidence(session)
+            user_conf = self.confidence_calculator.calculate_user_confidence(prompt_lab)
+            system_conf = self.confidence_calculator.calculate_system_confidence(prompt_lab)
             
             if user_conf < self.MIN_CONFIDENCE_FOR_OPTIMIZATION or system_conf < self.MIN_CONFIDENCE_FOR_OPTIMIZATION:
                 return False
@@ -345,7 +345,7 @@ class ColdStartManager:
         
         return True
     
-    def is_cold_start_complete(self, session: Session) -> bool:
+    def is_cold_start_complete(self, prompt_lab: PromptLab) -> bool:
         """
         Check if cold start phase is complete for a session
         
@@ -354,7 +354,7 @@ class ColdStartManager:
         """
         # Check feedback count
         feedback_count = UserFeedback.objects.filter(
-            draft__email__session=session
+            draft__email__prompt_lab=prompt_lab
         ).count()
         
         if feedback_count < self.MIN_FEEDBACK_FOR_OPTIMIZATION:
@@ -363,7 +363,7 @@ class ColdStartManager:
         # Check if we have feedback on cold start emails
         # Consider first synthetic emails as cold start
         cold_start_emails = Email.objects.filter(
-            session=session,
+            prompt_lab=prompt_lab,
             is_synthetic=True
         ).order_by('created_at')[:10]
         
@@ -376,9 +376,9 @@ class ColdStartManager:
             return False
         
         # Use confidence calculator's method
-        return self.confidence_calculator.is_cold_start_complete(session)
+        return self.confidence_calculator.is_cold_start_complete(prompt_lab)
     
-    def get_synthetic_email_ratio(self, session: Session) -> float:
+    def get_synthetic_email_ratio(self, prompt_lab: PromptLab) -> float:
         """
         Get recommended ratio of synthetic to real emails based on cold start progress
         
@@ -386,16 +386,16 @@ class ColdStartManager:
             Float between 0 and 1 representing synthetic email ratio
         """
         # During cold start, high ratio of synthetic
-        if not self.is_cold_start_complete(session):
+        if not self.is_cold_start_complete(prompt_lab):
             return 0.7
         
         # Get feedback counts
         total_feedback = UserFeedback.objects.filter(
-            draft__email__session=session
+            draft__email__prompt_lab=prompt_lab
         ).count()
         
         real_email_feedback = UserFeedback.objects.filter(
-            draft__email__session=session,
+            draft__email__prompt_lab=prompt_lab,
             draft__email__is_synthetic=False
         ).count()
         
@@ -409,7 +409,7 @@ class ColdStartManager:
         else:
             return 0.2
     
-    def get_cold_start_status(self, session: Session) -> Dict[str, Any]:
+    def get_cold_start_status(self, prompt_lab: PromptLab) -> Dict[str, Any]:
         """
         Get comprehensive cold start status for a session
         
@@ -417,12 +417,12 @@ class ColdStartManager:
             Dictionary with cold start metrics and status
         """
         feedback_count = UserFeedback.objects.filter(
-            draft__email__session=session
+            draft__email__prompt_lab=prompt_lab
         ).count()
         
         # Consider first synthetic emails as cold start
         cold_start_emails = Email.objects.filter(
-            session=session,
+            prompt_lab=prompt_lab,
             is_synthetic=True
         ).order_by('created_at')[:10]
         
@@ -430,14 +430,14 @@ class ColdStartManager:
             draft__email__in=cold_start_emails
         ).count()
         
-        user_conf = self.confidence_calculator.calculate_user_confidence(session)
-        system_conf = self.confidence_calculator.calculate_system_confidence(session)
+        user_conf = self.confidence_calculator.calculate_user_confidence(prompt_lab)
+        system_conf = self.confidence_calculator.calculate_system_confidence(prompt_lab)
         
         return {
-            'is_cold_start_active': not self.is_cold_start_complete(session),
-            'is_cold_start_complete': self.is_cold_start_complete(session),
-            'synthetic_email_ratio': self.get_synthetic_email_ratio(session),
-            'optimization_allowed': self.should_allow_optimization(session),
+            'is_cold_start_active': not self.is_cold_start_complete(prompt_lab),
+            'is_cold_start_complete': self.is_cold_start_complete(prompt_lab),
+            'synthetic_email_ratio': self.get_synthetic_email_ratio(prompt_lab),
+            'optimization_allowed': self.should_allow_optimization(prompt_lab),
             'feedback_collected': feedback_count,
             'cold_start_feedback': cold_start_feedback,
             'confidence_levels': {

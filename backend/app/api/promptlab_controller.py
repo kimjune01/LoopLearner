@@ -8,7 +8,7 @@ from django.db import models
 import logging
 import uuid
 
-from core.models import PromptLab, SystemPrompt, UserPreference, Email, Draft, DraftReason, ReasonRating, UserFeedback, SessionConfidence, ExtractedPreference
+from core.models import PromptLab, SystemPrompt, UserPreference, Email, Draft, DraftReason, ReasonRating, UserFeedback, PromptLabConfidence, ExtractedPreference
 from core.serializers import PromptLabSerializer
 
 logger = logging.getLogger(__name__)
@@ -428,7 +428,7 @@ class PromptLabDuplicateView(PromptLabAPIView):
             # Copy system prompts
             for prompt in source_prompt_lab.prompts.all():
                 SystemPrompt.objects.create(
-                    session=new_prompt_lab,
+                    prompt_lab=new_prompt_lab,
                     content=prompt.content,
                     version=prompt.version,
                     is_active=prompt.is_active,
@@ -438,7 +438,7 @@ class PromptLabDuplicateView(PromptLabAPIView):
             # Copy user preferences
             for pref in source_prompt_lab.preferences.filter(is_active=True):
                 UserPreference.objects.create(
-                    session=new_prompt_lab,
+                    prompt_lab=new_prompt_lab,
                     key=pref.key,
                     value=pref.value,
                     description=pref.description
@@ -449,7 +449,7 @@ class PromptLabDuplicateView(PromptLabAPIView):
             if copy_emails:
                 for email in source_prompt_lab.emails.all():
                     Email.objects.create(
-                        session=new_prompt_lab,
+                        prompt_lab=new_prompt_lab,
                         subject=email.subject,
                         body=email.body,
                         sender=email.sender,
@@ -899,9 +899,9 @@ class PromptLabConfidenceView(PromptLabAPIView):
                     'consistent_feedback_streak': confidence_tracker.consistent_feedback_streak
                 },
                 'thresholds': {
-                    'user_confidence_threshold': SessionConfidence.USER_CONFIDENCE_THRESHOLD,
-                    'system_confidence_threshold': SessionConfidence.SYSTEM_CONFIDENCE_THRESHOLD,
-                    'combined_confidence_threshold': SessionConfidence.COMBINED_CONFIDENCE_THRESHOLD
+                    'user_confidence_threshold': PromptLabConfidence.USER_CONFIDENCE_THRESHOLD,
+                    'system_confidence_threshold': PromptLabConfidence.SYSTEM_CONFIDENCE_THRESHOLD,
+                    'combined_confidence_threshold': PromptLabConfidence.COMBINED_CONFIDENCE_THRESHOLD
                 },
                 'last_calculated': confidence_tracker.last_calculated.isoformat()
             }
@@ -959,7 +959,7 @@ class ConfidenceHistoryView(PromptLabAPIView):
         try:
             # For now, return current snapshot as history
             # In future, could track historical confidence changes
-            confidence_tracker = SessionConfidence.objects.filter(prompt_lab=prompt_lab).first()
+            confidence_tracker = PromptLabConfidence.objects.filter(prompt_lab=prompt_lab).first()
             
             if not confidence_tracker:
                 # No confidence data yet
@@ -994,9 +994,9 @@ class ConfidenceThresholdsView(PromptLabAPIView):
         
         return Response({
             'prompt_lab_id': str(prompt_lab.id),
-            'user_confidence_threshold': SessionConfidence.USER_CONFIDENCE_THRESHOLD,
-            'system_confidence_threshold': SessionConfidence.SYSTEM_CONFIDENCE_THRESHOLD,
-            'combined_confidence_threshold': SessionConfidence.COMBINED_CONFIDENCE_THRESHOLD
+            'user_confidence_threshold': PromptLabConfidence.USER_CONFIDENCE_THRESHOLD,
+            'system_confidence_threshold': PromptLabConfidence.SYSTEM_CONFIDENCE_THRESHOLD,
+            'combined_confidence_threshold': PromptLabConfidence.COMBINED_CONFIDENCE_THRESHOLD
         })
     
     def post(self, request, prompt_lab_id):
@@ -1025,9 +1025,9 @@ class ConfidenceThresholdsView(PromptLabAPIView):
         # In future, could store per-prompt lab custom thresholds
         return Response({
             'prompt_lab_id': str(prompt_lab.id),
-            'user_confidence_threshold': SessionConfidence.USER_CONFIDENCE_THRESHOLD,
-            'system_confidence_threshold': SessionConfidence.SYSTEM_CONFIDENCE_THRESHOLD,
-            'combined_confidence_threshold': SessionConfidence.COMBINED_CONFIDENCE_THRESHOLD,
+            'user_confidence_threshold': PromptLabConfidence.USER_CONFIDENCE_THRESHOLD,
+            'system_confidence_threshold': PromptLabConfidence.SYSTEM_CONFIDENCE_THRESHOLD,
+            'combined_confidence_threshold': PromptLabConfidence.COMBINED_CONFIDENCE_THRESHOLD,
             'message': 'Custom thresholds will be supported in future version'
         }, status=status.HTTP_200_OK)
 
@@ -1433,8 +1433,8 @@ class PromptLabImportView(PromptLabAPIView):
             conflict_resolution = options.get('conflict_resolution', 'rename')
             
             # Import the prompt lab
-            from app.services.session_importer import SessionImporter, ImportValidationError
-            importer = SessionImporter()
+            from app.services.promptlab_importer import PromptLabImporter, ImportValidationError
+            importer = PromptLabImporter()
             
             prompt_lab = importer.import_session(data, handle_conflicts=conflict_resolution)
             
@@ -1491,8 +1491,8 @@ class PromptLabImportView(PromptLabAPIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            from app.services.session_importer import SessionImporter, ImportValidationError
-            importer = SessionImporter()
+            from app.services.promptlab_importer import PromptLabImporter, ImportValidationError
+            importer = PromptLabImporter()
             
             summary = importer.get_import_summary(import_data)
             return Response(summary)

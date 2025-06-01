@@ -16,7 +16,7 @@ django.setup()
 
 from django.utils import timezone
 from asgiref.sync import sync_to_async
-from core.models import Session, SystemPrompt, Email, Draft, UserFeedback, SessionConfidence
+from core.models import Session, SystemPrompt, Email, Draft, UserFeedback, PromptLabConfidence
 from app.services.optimization_orchestrator import OptimizationOrchestrator
 from app.services.convergence_detector import ConvergenceDetector
 
@@ -75,7 +75,7 @@ async def test_convergence_integration():
         )
     
     # Create a session confidence tracker to meet confidence convergence criteria
-    await sync_to_async(SessionConfidence.objects.create)(
+    await sync_to_async(PromptLabConfidence.objects.create)(
         session=session,
         user_confidence=0.85,  # High user confidence
         system_confidence=0.90,  # High system confidence

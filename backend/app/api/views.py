@@ -32,10 +32,10 @@ class EmailAPIView(APIView):
 class GenerateSyntheticEmailView(EmailAPIView):
     """Generate synthetic email for testing"""
     
-    def post(self, request, session_id=None):
+    def post(self, request, prompt_lab_id=None):
         # Handle both prompt lab-scoped and legacy calls
-        if session_id:
-            prompt_lab = get_object_or_404(PromptLab, id=session_id, is_active=True)
+        if prompt_lab_id:
+            prompt_lab = get_object_or_404(PromptLab, id=prompt_lab_id, is_active=True)
         else:
             # For legacy support, use a default prompt lab or create one
             prompt_lab = PromptLab.objects.filter(is_active=True).first()
@@ -78,10 +78,10 @@ class GenerateSyntheticEmailView(EmailAPIView):
 class CreateDraftView(EmailAPIView):
     """Create draft response for an email"""
     
-    def post(self, request, email_id, session_id=None):
-        if session_id:
+    def post(self, request, email_id, prompt_lab_id=None):
+        if prompt_lab_id:
             # PromptLab-scoped: verify email belongs to prompt lab
-            prompt_lab = get_object_or_404(PromptLab, id=session_id, is_active=True)
+            prompt_lab = get_object_or_404(PromptLab, id=prompt_lab_id, is_active=True)
             email = get_object_or_404(Email, id=email_id, prompt_lab=prompt_lab)
         else:
             # Legacy: any email
@@ -110,7 +110,7 @@ class CreateDraftView(EmailAPIView):
                 return Response({'error': 'num_drafts must be a valid integer'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Get or create a system prompt for the prompt lab
-        if session_id:
+        if prompt_lab_id:
             # Use the prompt lab we already fetched above
             system_prompt, created = SystemPrompt.objects.get_or_create(
                 prompt_lab=prompt_lab,
@@ -439,13 +439,13 @@ class TriggerOptimizationView(EmailAPIView):
         else:
             data = request.POST.dict()
             
-        session_id = data.get('session_id')
-        if not session_id:
-            return Response({'error': 'session_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        prompt_lab_id = data.get('prompt_lab_id')
+        if not prompt_lab_id:
+            return Response({'error': 'prompt_lab_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             # Get the prompt lab
-            prompt_lab = PromptLab.objects.get(id=session_id, is_active=True)
+            prompt_lab = PromptLab.objects.get(id=prompt_lab_id, is_active=True)
         except PromptLab.DoesNotExist:
             return Response({'error': 'PromptLab not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -468,7 +468,7 @@ class TriggerOptimizationView(EmailAPIView):
         
         # Run optimization
         try:
-            result = orchestrator.optimize_prompt(session, list(feedback_list))
+            result = orchestrator.optimize_prompt(prompt_lab, list(feedback_list))
             
             if result.success:
                 # Serialize the new prompt

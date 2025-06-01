@@ -1,7 +1,7 @@
 """
-Session Import Service
+PromptLab Import Service
 
-Handles importing session data from exported JSON files.
+Handles importing prompt lab data from exported JSON files.
 Supports conflict resolution and data validation.
 """
 import uuid
@@ -11,8 +11,8 @@ from django.utils import timezone
 from django.db import transaction
 
 from core.models import (
-    Session, SystemPrompt, UserPreference, Email, Draft, DraftReason,
-    UserFeedback, SessionConfidence, ExtractedPreference
+    PromptLab, SystemPrompt, UserPreference, Email, Draft, DraftReason,
+    UserFeedback, PromptLabConfidence, ExtractedPreference
 )
 
 logger = logging.getLogger(__name__)
@@ -23,8 +23,8 @@ class ImportValidationError(Exception):
     pass
 
 
-class SessionImporter:
-    """Service for importing session data from export files"""
+class PromptLabImporter:
+    """Service for importing prompt lab data from export files"""
     
     SUPPORTED_VERSIONS = ['1.0']
     
@@ -35,16 +35,16 @@ class SessionImporter:
         self, 
         export_data: Dict[str, Any], 
         handle_conflicts: str = 'rename'
-    ) -> Session:
+    ) -> PromptLab:
         """
-        Import a session from exported data
+        Import a prompt lab from exported data
         
         Args:
-            export_data: The exported session data
+            export_data: The exported prompt lab data
             handle_conflicts: How to handle name conflicts ('rename', 'error', 'replace')
             
         Returns:
-            The imported Session object
+            The imported PromptLab object
             
         Raises:
             ImportValidationError: If the data is invalid
@@ -53,47 +53,42 @@ class SessionImporter:
         self._validate_export_data(export_data)
         
         with transaction.atomic():
-            # Create the session
-            session = self._create_session(export_data['session'], handle_conflicts)
+            # Create the prompt lab
+            prompt_lab = self._create_prompt_lab(export_data['session'], handle_conflicts)
             
             # Import prompts
             if 'prompts' in export_data:
-                self._import_prompts(session, export_data['prompts'])
+                self._import_prompts(prompt_lab, export_data['prompts'])
             
             # Import preferences  
             if 'preferences' in export_data:
-                self._import_preferences(session, export_data['preferences'])
+                self._import_preferences(prompt_lab, export_data['preferences'])
             
             # Import emails
             if 'emails' in export_data:
-                self._import_emails(session, export_data['emails'])
+                self._import_emails(prompt_lab, export_data['emails'])
             
-            self.logger.info(f"Successfully imported session '{session.name}' (ID: {session.id})")
-            return session
+            self.logger.info(f"Successfully imported prompt lab '{prompt_lab.name}' (ID: {prompt_lab.id})")
+            return prompt_lab
     
     def _validate_export_data(self, data: Dict[str, Any]) -> None:
-        """Validate that export data has the correct structure and required fields"""
-        if not data:
-            raise ImportValidationError("Import data is empty or None")
-        
+        """Validate the export data structure and content"""
         # Check version
         version = data.get('version')
-        if not version:
-            raise ImportValidationError("Export data missing version field")
-        
         if version not in self.SUPPORTED_VERSIONS:
-            raise ImportValidationError(f"Unsupported export format version: {version}")
+            raise ImportValidationError(f"Unsupported export version: {version}")
         
-        # Check required session data
+        # Check required top-level fields
         if 'session' not in data:
-            raise ImportValidationError("Export data missing session information")
+            raise ImportValidationError("Export data missing required 'session' field")
         
+        # Validate session data
         session_data = data['session']
         if not isinstance(session_data, dict):
-            raise ImportValidationError("Session data must be a dictionary")
+            raise ImportValidationError("PromptLab data must be a dictionary")
         
         if 'name' not in session_data:
-            raise ImportValidationError("Session data missing required 'name' field")
+            raise ImportValidationError("PromptLab data missing required 'name' field")
         
         # Validate prompts if present
         if 'prompts' in data:
@@ -108,38 +103,31 @@ class SessionImporter:
             self._validate_emails_data(data['emails'])
     
     def _validate_prompts_data(self, prompts: List[Dict[str, Any]]) -> None:
-        """Validate prompts data structure"""
+        """Validate prompt data structure"""
         if not isinstance(prompts, list):
-            raise ImportValidationError("Prompts data must be a list")
+            raise ImportValidationError("Prompts must be a list")
         
         for i, prompt in enumerate(prompts):
             if not isinstance(prompt, dict):
                 raise ImportValidationError(f"Prompt {i} must be a dictionary")
             
-            if 'version' not in prompt:
-                raise ImportValidationError(f"Prompt {i} missing 'version' field")
-            
+            # Check required fields
             if 'content' not in prompt:
                 raise ImportValidationError(f"Prompt {i} missing 'content' field")
             
-            # Validate data types
-            try:
-                int(prompt['version'])
-            except (ValueError, TypeError):
-                raise ImportValidationError(f"Prompt {i} version must be an integer")
-            
-            if not isinstance(prompt['content'], str):
-                raise ImportValidationError(f"Prompt {i} content must be a string")
+            if 'version' not in prompt:
+                raise ImportValidationError(f"Prompt {i} missing 'version' field")
     
     def _validate_preferences_data(self, preferences: List[Dict[str, Any]]) -> None:
-        """Validate preferences data structure"""
+        """Validate preference data structure"""
         if not isinstance(preferences, list):
-            raise ImportValidationError("Preferences data must be a list")
+            raise ImportValidationError("Preferences must be a list")
         
         for i, pref in enumerate(preferences):
             if not isinstance(pref, dict):
                 raise ImportValidationError(f"Preference {i} must be a dictionary")
             
+            # Check required fields
             if 'key' not in pref:
                 raise ImportValidationError(f"Preference {i} missing 'key' field")
             
@@ -147,9 +135,9 @@ class SessionImporter:
                 raise ImportValidationError(f"Preference {i} missing 'value' field")
     
     def _validate_emails_data(self, emails: List[Dict[str, Any]]) -> None:
-        """Validate emails data structure"""
+        """Validate email data structure"""
         if not isinstance(emails, list):
-            raise ImportValidationError("Emails data must be a list")
+            raise ImportValidationError("Emails must be a list")
         
         for i, email in enumerate(emails):
             if not isinstance(email, dict):
@@ -161,23 +149,23 @@ class SessionImporter:
             if 'body' not in email:
                 raise ImportValidationError(f"Email {i} missing 'body' field")
     
-    def _create_session(self, session_data: Dict[str, Any], handle_conflicts: str) -> Session:
-        """Create the session, handling name conflicts"""
+    def _create_prompt_lab(self, session_data: Dict[str, Any], handle_conflicts: str) -> PromptLab:
+        """Create the prompt lab, handling name conflicts"""
         name = session_data['name']
         description = session_data.get('description', '')
         
-        # Check for existing session with same name
-        if Session.objects.filter(name=name, is_active=True).exists():
+        # Check for existing prompt lab with same name
+        if PromptLab.objects.filter(name=name, is_active=True).exists():
             if handle_conflicts == 'error':
-                raise ImportValidationError(f"Session with name '{name}' already exists")
+                raise ImportValidationError(f"PromptLab with name '{name}' already exists")
             elif handle_conflicts == 'rename':
                 name = self._generate_unique_name(name)
             elif handle_conflicts == 'replace':
-                # Deactivate existing session
-                Session.objects.filter(name=name, is_active=True).update(is_active=False)
+                # Deactivate existing prompt lab
+                PromptLab.objects.filter(name=name, is_active=True).update(is_active=False)
         
-        # Create the new session
-        session = Session.objects.create(
+        # Create the new prompt lab
+        prompt_lab = PromptLab.objects.create(
             name=name,
             description=description,
             optimization_iterations=session_data.get('optimization_iterations', 0),
@@ -185,50 +173,50 @@ class SessionImporter:
             total_feedback_collected=session_data.get('total_feedback_collected', 0)
         )
         
-        return session
+        return prompt_lab
     
     def _generate_unique_name(self, base_name: str) -> str:
-        """Generate a unique session name by appending a number"""
+        """Generate a unique prompt lab name by appending a number"""
         counter = 1
         new_name = f"{base_name} (Import {counter})"
         
-        while Session.objects.filter(name=new_name, is_active=True).exists():
+        while PromptLab.objects.filter(name=new_name, is_active=True).exists():
             counter += 1
             new_name = f"{base_name} (Import {counter})"
         
         return new_name
     
-    def _import_prompts(self, session: Session, prompts_data: List[Dict[str, Any]]) -> None:
-        """Import system prompts for the session"""
+    def _import_prompts(self, prompt_lab: PromptLab, prompts_data: List[Dict[str, Any]]) -> None:
+        """Import system prompts for the prompt lab"""
         for prompt_data in prompts_data:
             SystemPrompt.objects.create(
-                session=session,
+                prompt_lab=prompt_lab,
                 content=prompt_data['content'],
                 version=prompt_data['version'],
                 is_active=prompt_data.get('is_active', False),
                 performance_score=prompt_data.get('performance_score', 0.0)
             )
         
-        self.logger.info(f"Imported {len(prompts_data)} prompts for session {session.name}")
+        self.logger.info(f"Imported {len(prompts_data)} prompts for prompt lab {prompt_lab.name}")
     
-    def _import_preferences(self, session: Session, preferences_data: List[Dict[str, Any]]) -> None:
-        """Import user preferences for the session"""
+    def _import_preferences(self, prompt_lab: PromptLab, preferences_data: List[Dict[str, Any]]) -> None:
+        """Import user preferences for the prompt lab"""
         for pref_data in preferences_data:
             UserPreference.objects.create(
-                session=session,
+                prompt_lab=prompt_lab,
                 key=pref_data['key'],
                 value=pref_data['value'],
                 description=pref_data.get('description', ''),
                 is_active=pref_data.get('is_active', True)
             )
         
-        self.logger.info(f"Imported {len(preferences_data)} preferences for session {session.name}")
+        self.logger.info(f"Imported {len(preferences_data)} preferences for prompt lab {prompt_lab.name}")
     
-    def _import_emails(self, session: Session, emails_data: List[Dict[str, Any]]) -> None:
-        """Import emails for the session"""
+    def _import_emails(self, prompt_lab: PromptLab, emails_data: List[Dict[str, Any]]) -> None:
+        """Import emails for the prompt lab"""
         for email_data in emails_data:
             Email.objects.create(
-                session=session,
+                prompt_lab=prompt_lab,
                 subject=email_data['subject'],
                 body=email_data['body'],
                 sender=email_data.get('sender', 'unknown@example.com'),
@@ -236,7 +224,7 @@ class SessionImporter:
                 is_synthetic=email_data.get('is_synthetic', True)
             )
         
-        self.logger.info(f"Imported {len(emails_data)} emails for session {session.name}")
+        self.logger.info(f"Imported {len(emails_data)} emails for prompt lab {prompt_lab.name}")
     
     def get_import_summary(self, export_data: Dict[str, Any]) -> Dict[str, Any]:
         """Get a summary of what would be imported without actually importing"""
@@ -254,7 +242,7 @@ class SessionImporter:
         
         # Check for potential conflicts
         name = export_data['session']['name']
-        if Session.objects.filter(name=name, is_active=True).exists():
+        if PromptLab.objects.filter(name=name, is_active=True).exists():
             summary['has_name_conflict'] = True
             summary['suggested_name'] = self._generate_unique_name(name)
         else:
@@ -264,10 +252,10 @@ class SessionImporter:
 
 
 class SystemImporter:
-    """Service for importing complete system state including multiple sessions"""
+    """Service for importing complete system state including multiple prompt labs"""
     
     def __init__(self):
-        self.session_importer = SessionImporter()
+        self.promptlab_importer = PromptLabImporter()
         self.logger = logging.getLogger(__name__)
     
     def import_system_state(
@@ -276,7 +264,7 @@ class SystemImporter:
         preserve_existing: bool = True
     ) -> Dict[str, Any]:
         """
-        Import complete system state including multiple sessions
+        Import complete system state including multiple prompt labs
         
         Args:
             system_data: The exported system data
@@ -303,7 +291,7 @@ class SystemImporter:
                 count = self._import_global_preferences(system_data['global_preferences'])
                 results['imported_global_preferences'] = count
             
-            # Import sessions
+            # Import prompt labs
             if 'sessions' in system_data:
                 for session_data in system_data['sessions']:
                     try:
@@ -316,14 +304,14 @@ class SystemImporter:
                             'version': system_data.get('version', '1.0')
                         }
                         
-                        self.session_importer.import_session(
+                        self.promptlab_importer.import_session(
                             formatted_data, 
                             handle_conflicts='rename'
                         )
                         results['imported_sessions'] += 1
                         
                     except Exception as e:
-                        error_msg = f"Failed to import session '{session_data.get('name', 'unknown')}': {str(e)}"
+                        error_msg = f"Failed to import prompt lab '{session_data.get('name', 'unknown')}': {str(e)}"
                         results['errors'].append(error_msg)
                         self.logger.error(error_msg)
         
@@ -332,15 +320,15 @@ class SystemImporter:
     
     def _clear_existing_data(self) -> None:
         """Clear existing system data"""
-        Session.objects.filter(is_active=True).update(is_active=False)
-        UserPreference.objects.filter(session__isnull=True).delete()
+        PromptLab.objects.filter(is_active=True).update(is_active=False)
+        UserPreference.objects.filter(prompt_lab__isnull=True).delete()
     
     def _import_global_preferences(self, preferences_data: List[Dict[str, Any]]) -> int:
-        """Import global (session-independent) preferences"""
+        """Import global (prompt lab-independent) preferences"""
         count = 0
         for pref_data in preferences_data:
             UserPreference.objects.update_or_create(
-                session=None,  # Global preference
+                prompt_lab=None,  # Global preference
                 key=pref_data['key'],
                 defaults={
                     'value': pref_data['value'],

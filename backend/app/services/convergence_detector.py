@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.db.models import Avg, Count, Q
-from core.models import Session, SystemPrompt, UserFeedback, SessionConfidence
+from core.models import Session, SystemPrompt, UserFeedback, PromptLabConfidence
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +211,7 @@ class ConvergenceDetector:
         """Check if confidence metrics indicate convergence"""
         try:
             # Get latest confidence tracker
-            confidence_tracker = SessionConfidence.objects.filter(session=session).first()
+            confidence_tracker = PromptLabConfidence.objects.filter(session=session).first()
             
             if not confidence_tracker:
                 return False  # No confidence data yet

@@ -64,9 +64,9 @@ class ComputeBudgetView(APIView):
 class PromptLabComputeCostView(APIView):
     """Get compute cost estimates for a prompt lab"""
     
-    def get(self, request, session_id):
+    def get(self, request, prompt_lab_id):
         """Get compute cost breakdown for prompt lab"""
-        prompt_lab = get_object_or_404(PromptLab, id=session_id, is_active=True)
+        prompt_lab = get_object_or_404(PromptLab, id=prompt_lab_id, is_active=True)
         
         try:
             optimizer = ComputeOptimizer()
@@ -79,17 +79,17 @@ class PromptLabComputeCostView(APIView):
             
             # Historical costs (simplified - in production, track actual costs)
             historical_costs = {
-                'total_iterations': session.optimization_iterations,
-                'estimated_total_cost': session.optimization_iterations * cost_estimate['total_cost'],
+                'total_iterations': prompt_lab.optimization_iterations,
+                'estimated_total_cost': prompt_lab.optimization_iterations * cost_estimate['total_cost'],
                 'average_cost_per_iteration': cost_estimate['total_cost']
             }
             
             response_data = {
-                'session_id': str(session.id),
+                'prompt_lab_id': str(prompt_lab.id),
                 'next_iteration_cost': cost_estimate,
                 'historical_costs': historical_costs,
                 'optimization_recommendation': optimization_decision,
-                'cost_saving_tips': self._get_cost_saving_tips(session, optimization_decision)
+                'cost_saving_tips': self._get_cost_saving_tips(prompt_lab, optimization_decision)
             }
             
             return Response(response_data)
@@ -101,7 +101,7 @@ class PromptLabComputeCostView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
-    def _get_cost_saving_tips(self, session, optimization_decision):
+    def _get_cost_saving_tips(self, prompt_lab, optimization_decision):
         """Generate cost-saving recommendations"""
         tips = []
         
@@ -112,7 +112,7 @@ class PromptLabComputeCostView(APIView):
                 'impact': 'Minimal performance improvement expected'
             })
         
-        if session.emails.count() > 50:
+        if prompt_lab.emails.count() > 50:
             tips.append({
                 'tip': 'Large email dataset increases evaluation costs',
                 'savings': 'Use sampling for evaluation to save ~30%',
@@ -154,12 +154,12 @@ class BatchOptimizationView(APIView):
                     prompt_lab = PromptLab.objects.get(id=session_id, is_active=True)
                     
                     # Check if optimization is worthwhile
-                    should_optimize = optimizer.should_continue_optimization(session)
-                    cost_estimate = optimizer.estimate_optimization_cost(session)
+                    should_optimize = optimizer.should_continue_optimization(prompt_lab)
+                    cost_estimate = optimizer.estimate_optimization_cost(prompt_lab)
                     
                     batch_analysis.append({
                         'session_id': str(session_id),
-                        'session_name': session.name,
+                        'session_name': prompt_lab.name,
                         'should_optimize': should_optimize.get('continue', False),
                         'reason': should_optimize.get('reason', 'unknown'),
                         'estimated_cost': cost_estimate['total_cost'],

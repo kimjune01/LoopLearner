@@ -265,7 +265,7 @@ class EvaluationResult(models.Model):
         return f"Result {self.id}: {self.similarity_score:.2f} ({'PASS' if self.passed else 'FAIL'})"
 
 
-class SessionConfidence(models.Model):
+class PromptLabConfidence(models.Model):
     """Track confidence metrics for prompt labs"""
     
     # Threshold constants for determining when learning is sufficient

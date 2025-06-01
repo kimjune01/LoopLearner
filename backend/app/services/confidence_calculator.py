@@ -7,7 +7,7 @@ from typing import Dict, Any, Tuple
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.db.models import Count, Avg, Q
-from core.models import Session, SessionConfidence, UserFeedback, ReasonRating, Draft
+from core.models import Session, PromptLabConfidence, UserFeedback, ReasonRating, Draft
 
 logger = logging.getLogger(__name__)
 
@@ -244,12 +244,12 @@ class ConfidenceCalculator:
     def is_user_confidence_sufficient(self, session: Session) -> bool:
         """Check if user confidence meets threshold"""
         confidence = self.calculate_user_confidence(session)
-        return confidence >= SessionConfidence.USER_CONFIDENCE_THRESHOLD
+        return confidence >= PromptLabConfidence.USER_CONFIDENCE_THRESHOLD
     
     def is_system_confidence_sufficient(self, session: Session) -> bool:
         """Check if system confidence meets threshold"""
         confidence = self.calculate_system_confidence(session)
-        return confidence >= SessionConfidence.SYSTEM_CONFIDENCE_THRESHOLD
+        return confidence >= PromptLabConfidence.SYSTEM_CONFIDENCE_THRESHOLD
     
     def should_continue_learning(self, session: Session) -> bool:
         """Determine if system should continue learning"""
@@ -275,7 +275,7 @@ class ConfidenceCalculator:
         # Lower thresholds for cold start completion
         return user_conf >= 0.4 and system_conf >= 0.4
     
-    def update_session_confidence(self, session: Session) -> SessionConfidence:
+    def update_session_confidence(self, session: Session) -> PromptLabConfidence:
         """Calculate and update confidence metrics for a session"""
         try:
             # Calculate metrics
@@ -283,7 +283,7 @@ class ConfidenceCalculator:
             system_confidence = self.calculate_system_confidence(session)
             
             # Get or create confidence tracker
-            confidence_tracker, created = SessionConfidence.objects.get_or_create(
+            confidence_tracker, created = PromptLabConfidence.objects.get_or_create(
                 session=session,
                 defaults={
                     'user_confidence': user_confidence,
@@ -315,7 +315,7 @@ class ConfidenceCalculator:
         except Exception as e:
             self.logger.error(f"Error updating session confidence for {session.id}: {str(e)}")
             # Return default values if calculation fails
-            confidence_tracker, _ = SessionConfidence.objects.get_or_create(
+            confidence_tracker, _ = PromptLabConfidence.objects.get_or_create(
                 session=session,
                 defaults={'user_confidence': 0.1, 'system_confidence': 0.1}
             )
