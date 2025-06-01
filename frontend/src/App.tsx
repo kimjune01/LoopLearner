@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
 import { healthCheck } from './services/api'
-import { SessionCollection } from './components/SessionCollection'
-import { SessionDetail } from './components/SessionDetail'
+import { PromptLabCollection } from './components/PromptLabCollection'
+import { PromptLabDetail } from './components/PromptLabDetail'
 import { AboutPage } from './components/AboutPage'
 import EvaluationDatasetList from './components/EvaluationDatasetList'
 import EvaluationDatasetDetail from './components/EvaluationDatasetDetail'
+import EvaluationRun from './components/EvaluationRun'
 import ReasoningFeedbackDemo from './components/ReasoningFeedbackDemo'
 import ProgressVisualizationDemo from './components/ProgressVisualizationDemo'
 
@@ -118,11 +119,13 @@ function App() {
         <Navigation backendStatus={backendStatus} />
         
         <Routes>
-          <Route path="/" element={<SessionCollection />} />
-          <Route path="/sessions/:id" element={<SessionDetail />} />
+          <Route path="/" element={<PromptLabCollection />} />
+          <Route path="/prompt-labs/:id" element={<PromptLabDetail />} />
           <Route path="/about" element={<AboutPage />} />
-          <Route path="/evaluation/datasets" element={<EvaluationDatasetList />} />
+          <Route path="/evaluation/datasets" element={<Navigate to="/" replace />} />
           <Route path="/evaluation/datasets/:datasetId" element={<EvaluationDatasetDetail />} />
+          <Route path="/evaluation/datasets/:datasetId/run" element={<EvaluationRun />} />
+          <Route path="/sessions/:sessionId/evaluation/datasets" element={<EvaluationDatasetList />} />
           <Route path="/reasoning-demo" element={<ReasoningFeedbackDemo />} />
           <Route path="/progress-demo" element={<ProgressVisualizationDemo />} />
         </Routes>

@@ -3,7 +3,7 @@ Tests for evaluation dataset migration when prompt parameters change
 """
 import pytest
 from django.test import TestCase
-from core.models import Session, SystemPrompt, EvaluationDataset, EvaluationCase
+from core.models import PromptLab, SystemPrompt, EvaluationDataset, EvaluationCase
 from app.services.evaluation_dataset_migrator import EvaluationDatasetMigrator
 from app.services.evaluation_case_generator import EvaluationCaseGenerator
 
@@ -13,14 +13,14 @@ class EvaluationDatasetMigrationTests(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Migration Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Migration Test PromptLab",
             description="Testing dataset migration"
         )
         
         # Original prompt with simple parameters
         self.original_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="""You are an email assistant.
 
 Email: {{EMAIL_CONTENT}}
@@ -33,7 +33,7 @@ Provide a professional response.""",
         
         # Updated prompt with different parameters
         self.updated_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="""You are a customer service assistant.
 
 Email Content: {{EMAIL_CONTENT}}
@@ -48,7 +48,7 @@ Provide a professional response.""",
         
         # Create dataset with original cases
         self.dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Test Migration Dataset"
         )
         
@@ -111,7 +111,7 @@ Provide a professional response.""",
     def test_analyze_empty_dataset_compatibility(self):
         """Test compatibility analysis with empty dataset"""
         empty_dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Empty Dataset"
         )
         
@@ -230,7 +230,7 @@ Provide a professional response.""",
     def test_migration_preserves_dataset_metadata(self):
         """Test that migration preserves important dataset metadata"""
         original_name = self.dataset.name
-        original_session = self.dataset.session
+        original_prompt_lab = self.dataset.prompt lab
         
         result = self.migrator.migrate_dataset(
             self.dataset,
@@ -243,7 +243,7 @@ Provide a professional response.""",
         
         # Metadata should be preserved
         self.assertEqual(self.dataset.name, original_name)
-        self.assertEqual(self.dataset.session, original_session)
+        self.assertEqual(self.dataset., original_session)
         
         # But cases should be updated
         updated_cases = list(self.dataset.cases.all())

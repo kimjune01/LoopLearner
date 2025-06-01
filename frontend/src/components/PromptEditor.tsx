@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 
 interface PromptEditorProps {
   initialPrompt?: string;
-  sessionName?: string;
-  sessionDescription?: string;
+  promptLabName?: string;
+  promptLabDescription?: string;
   onSave: (prompt: string) => void;
   onCancel: () => void;
   isCreating?: boolean;
@@ -11,8 +11,8 @@ interface PromptEditorProps {
 
 export const PromptEditor: React.FC<PromptEditorProps> = ({
   initialPrompt = '',
-  sessionName,
-  sessionDescription,
+  promptLabName,
+  promptLabDescription,
   onSave,
   onCancel,
   isCreating = false
@@ -48,8 +48,8 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
 
   const suggestPrompt = () => {
     let suggestion = '';
-    if (sessionName && sessionDescription) {
-      suggestion = `You are an AI assistant designed for ${sessionName}. ${sessionDescription}
+    if (promptLabName && promptLabDescription) {
+      suggestion = `You are an AI assistant designed for ${promptLabName}. ${promptLabDescription}
 
 Key responsibilities:
 - Provide helpful and accurate responses
@@ -58,8 +58,8 @@ Key responsibilities:
 - Ask clarifying questions when needed
 
 Please respond thoughtfully and consider the context of each interaction.`;
-    } else if (sessionName) {
-      suggestion = `You are an AI assistant for ${sessionName}. Provide helpful, accurate, and professional responses while maintaining a friendly tone.`;
+    } else if (promptLabName) {
+      suggestion = `You are an AI assistant for ${promptLabName}. Provide helpful, accurate, and professional responses while maintaining a friendly tone.`;
     } else {
       suggestion = `You are a helpful AI assistant. Provide accurate, thoughtful responses and ask clarifying questions when needed to better assist the user.`;
     }
@@ -77,7 +77,7 @@ Please respond thoughtfully and consider the context of each interaction.`;
                 {isCreating ? 'Create System Prompt' : 'Edit System Prompt'}
               </h2>
               <p className="text-gray-600 mt-1">
-                {sessionName && `For session: ${sessionName}`}
+                {promptLabName && `For prompt lab: ${promptLabName}`}
               </p>
             </div>
             <button
@@ -93,8 +93,8 @@ Please respond thoughtfully and consider the context of each interaction.`;
 
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-          {/* Session Context */}
-          {sessionDescription && (
+          {/* Prompt Lab Context */}
+          {promptLabDescription && (
             <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0">
@@ -103,8 +103,8 @@ Please respond thoughtfully and consider the context of each interaction.`;
                   </svg>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-purple-900 mb-1">Session Context</h3>
-                  <p className="text-purple-800 text-sm">{sessionDescription}</p>
+                  <h3 className="font-semibold text-purple-900 mb-1">Prompt Lab Context</h3>
+                  <p className="text-purple-800 text-sm">{promptLabDescription}</p>
                 </div>
               </div>
             </div>

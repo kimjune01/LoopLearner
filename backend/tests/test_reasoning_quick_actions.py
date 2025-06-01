@@ -5,7 +5,7 @@ Following TDD principles: Write failing tests first that define expected behavio
 import json
 from django.test import TestCase, Client
 from django.urls import reverse
-from core.models import Session, SystemPrompt, Email, Draft, DraftReason, UserFeedback, ReasonRating
+from core.models import PromptLab, SystemPrompt, Email, Draft, DraftReason, UserFeedback, ReasonRating
 
 
 class TestReasoningQuickActions(TestCase):
@@ -15,21 +15,21 @@ class TestReasoningQuickActions(TestCase):
         """Set up test data"""
         self.client = Client()
         
-        # Create test session
-        self.session = Session.objects.create(
-            name="Quick Actions Test Session",
+        # Create test 
+        self.prompt_lab = PromptLab.objects.create(
+            name="Quick Actions Test PromptLab",
             description="Test session for quick actions"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
         )
         
         self.email = Email.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             subject="Test Email",
             body="Test email body",
             sender="test@example.com"
@@ -68,7 +68,7 @@ class TestReasoningQuickActions(TestCase):
         
         response = self.client.post(
             reverse('bulk-accept-reasons', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'draft_id': self.draft.id
             }),
             data=json.dumps({}),
@@ -81,7 +81,7 @@ class TestReasoningQuickActions(TestCase):
         """Test that bulk accept creates feedback with all reasons liked"""
         response = self.client.post(
             reverse('bulk-accept-reasons', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'draft_id': self.draft.id
             }),
             data=json.dumps({
@@ -114,7 +114,7 @@ class TestReasoningQuickActions(TestCase):
         """Test that bulk reject all reasons endpoint works"""
         response = self.client.post(
             reverse('bulk-reject-reasons', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'draft_id': self.draft.id
             }),
             data=json.dumps({
@@ -149,7 +149,7 @@ class TestReasoningQuickActions(TestCase):
         
         response = self.client.post(
             reverse('bulk-rate-reasons', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'draft_id': self.draft.id
             }),
             data=json.dumps({
@@ -188,7 +188,7 @@ class TestReasoningQuickActions(TestCase):
         # Test thumbs up
         response = self.client.post(
             reverse('quick-rate-reason', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'reason_id': self.reason1.id
             }),
             data=json.dumps({
@@ -211,7 +211,7 @@ class TestReasoningQuickActions(TestCase):
         # Test thumbs down on different reason
         response = self.client.post(
             reverse('quick-rate-reason', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'reason_id': self.reason2.id
             }),
             data=json.dumps({
@@ -235,7 +235,7 @@ class TestReasoningQuickActions(TestCase):
         # Test bulk accept with invalid draft
         response = self.client.post(
             reverse('bulk-accept-reasons', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'draft_id': 99999
             }),
             data=json.dumps({}),
@@ -247,7 +247,7 @@ class TestReasoningQuickActions(TestCase):
         # Test quick rate with invalid reason
         response = self.client.post(
             reverse('quick-rate-reason', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'reason_id': 99999
             }),
             data=json.dumps({
@@ -262,7 +262,7 @@ class TestReasoningQuickActions(TestCase):
         # Test quick rate with invalid rating value
         response = self.client.post(
             reverse('quick-rate-reason', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'reason_id': self.reason1.id
             }),
             data=json.dumps({
@@ -275,17 +275,17 @@ class TestReasoningQuickActions(TestCase):
         self.assertEqual(response.status_code, 400)
     
     def test_quick_actions_cross_session_validation(self):
-        """Test that quick actions validate session ownership"""
-        # Create another session with different draft
-        other_session = Session.objects.create(name="Other Session")
+        """Test that quick actions validate  ownership"""
+        # Create another  with different draft
+        other_session = PromptLab.objects.create(name="Other PromptLab")
         other_email = Email.objects.create(
-            session=other_session,
+            prompt_lab=other_session,
             subject="Other Email",
             body="Other body",
             sender="other@example.com"
         )
         other_prompt = SystemPrompt.objects.create(
-            session=other_session,
+            prompt_lab=other_session,
             content="Other prompt",
             version=1
         )
@@ -295,10 +295,10 @@ class TestReasoningQuickActions(TestCase):
             system_prompt=other_prompt
         )
         
-        # Try to bulk accept draft from different session
+        # Try to bulk accept draft from different 
         response = self.client.post(
             reverse('bulk-accept-reasons', kwargs={
-                'session_id': self.session.id,  # Wrong session
+                'prompt_lab_id': self.prompt_lab.id,  # Wrong 
                 'draft_id': other_draft.id
             }),
             data=json.dumps({}),
@@ -325,7 +325,7 @@ class TestReasoningQuickActions(TestCase):
         # Now do bulk accept - should create new feedback, not modify existing
         response = self.client.post(
             reverse('bulk-accept-reasons', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'draft_id': self.draft.id
             }),
             data=json.dumps({
@@ -352,7 +352,7 @@ class TestReasoningQuickActions(TestCase):
         """Test that bulk actions return proper response format"""
         response = self.client.post(
             reverse('bulk-accept-reasons', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'draft_id': self.draft.id
             }),
             data=json.dumps({

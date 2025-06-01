@@ -5,7 +5,7 @@ Following TDD principles: Write failing tests first that define expected behavio
 import json
 from django.test import TestCase, Client
 from django.urls import reverse
-from core.models import Session, SystemPrompt, Email, Draft, DraftReason, UserFeedback, ReasonRating
+from core.models import PromptLab, SystemPrompt, Email, Draft, DraftReason, UserFeedback, ReasonRating
 
 
 class TestFeedbackAPIWithReasonRatings(TestCase):
@@ -16,19 +16,19 @@ class TestFeedbackAPIWithReasonRatings(TestCase):
         self.client = Client()
         
         # Create test data
-        self.session = Session.objects.create(
-            name="Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="Test session for API"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1
         )
         
         self.email = Email.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             subject="Test Email",
             body="Test email body",
             sender="test@example.com"

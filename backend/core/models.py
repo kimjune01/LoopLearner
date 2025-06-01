@@ -4,8 +4,8 @@ import json
 import uuid
 
 
-class Session(models.Model):
-    """Learning sessions with isolated state and prompt evolution"""
+class PromptLab(models.Model):
+    """Prompt optimization laboratories with isolated state and evolution tracking"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
@@ -13,7 +13,7 @@ class Session(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
     
-    # Session metadata
+    # PromptLab metadata
     optimization_iterations = models.IntegerField(default=0)
     total_emails_processed = models.IntegerField(default=0)
     total_feedback_collected = models.IntegerField(default=0)
@@ -27,9 +27,9 @@ class Session(models.Model):
 
 class SystemPrompt(models.Model):
     """System prompt versions with evolution tracking"""
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='prompts', null=True, blank=True)
+    prompt_lab = models.ForeignKey(PromptLab, on_delete=models.CASCADE, related_name='prompts', null=True, blank=True)
     content = models.TextField()
-    version = models.IntegerField()  # Session-scoped version (global when session is null)
+    version = models.IntegerField()  # PromptLab-scoped version (global when prompt_lab is null)
     created_at = models.DateTimeField(default=timezone.now)
     is_active = models.BooleanField(default=False)
     performance_score = models.FloatField(null=True, blank=True)
@@ -37,6 +37,7 @@ class SystemPrompt(models.Model):
     
     class Meta:
         ordering = ['-version']
+        unique_together = [['prompt_lab', 'version']]
     
     def extract_parameters(self):
         """Extract parameter names from content and update the parameters field"""
@@ -66,14 +67,14 @@ class SystemPrompt(models.Model):
         super().save(*args, **kwargs)
     
     def __str__(self):
-        if self.session:
-            return f"{self.session.name} Prompt v{self.version}"
+        if self.prompt_lab:
+            return f"{self.prompt_lab.name} Prompt v{self.version}"
         return f"Global Prompt v{self.version}"
 
 
 class UserPreference(models.Model):
     """User preferences in natural language"""
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='preferences', null=True, blank=True)
+    prompt_lab = models.ForeignKey(PromptLab, on_delete=models.CASCADE, related_name='preferences', null=True, blank=True)
     key = models.CharField(max_length=100)
     value = models.TextField()
     description = models.TextField(blank=True)
@@ -85,8 +86,8 @@ class UserPreference(models.Model):
         pass  # Remove unique constraint for now
     
     def __str__(self):
-        if self.session:
-            return f"{self.session.name} - {self.key}: {self.value[:50]}"
+        if self.prompt_lab:
+            return f"{self.prompt_lab.name} - {self.key}: {self.value[:50]}"
         return f"Global - {self.key}: {self.value[:50]}"
 
 
@@ -100,7 +101,7 @@ class Email(models.Model):
         ('inquiry', 'Inquiry'),
     ]
     
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='emails', null=True, blank=True)
+    prompt_lab = models.ForeignKey(PromptLab, on_delete=models.CASCADE, related_name='emails', null=True, blank=True)
     subject = models.CharField(max_length=500)
     body = models.TextField()
     sender = models.EmailField()
@@ -109,8 +110,8 @@ class Email(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     
     def __str__(self):
-        if self.session:
-            return f"{self.session.name} - {self.subject[:50]} ({self.scenario_type})"
+        if self.prompt_lab:
+            return f"{self.prompt_lab.name} - {self.subject[:50]} ({self.scenario_type})"
         return f"Global - {self.subject[:50]} ({self.scenario_type})"
 
 
@@ -214,7 +215,7 @@ class OptimizationRun(models.Model):
 
 class EvaluationDataset(models.Model):
     """Simple evaluation dataset - just name and description for now"""
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='evaluation_datasets', null=True, blank=True)
+    prompt_lab = models.ForeignKey(PromptLab, on_delete=models.CASCADE, related_name='evaluation_datasets', null=True, blank=True)
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     parameters = models.JSONField(default=list, blank=True)  # List of parameter names
@@ -223,7 +224,7 @@ class EvaluationDataset(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     def __str__(self):
-        return f"{self.name} ({self.session.name if self.session else 'Global'})"
+        return f"{self.name} ({self.prompt_lab.name if self.prompt_lab else 'Global'})"
 
 
 class EvaluationCase(models.Model):
@@ -265,14 +266,14 @@ class EvaluationResult(models.Model):
 
 
 class SessionConfidence(models.Model):
-    """Track confidence metrics for learning sessions"""
+    """Track confidence metrics for prompt labs"""
     
     # Threshold constants for determining when learning is sufficient
     USER_CONFIDENCE_THRESHOLD = 0.75
     SYSTEM_CONFIDENCE_THRESHOLD = 0.75  
     COMBINED_CONFIDENCE_THRESHOLD = 0.80
     
-    session = models.OneToOneField(Session, on_delete=models.CASCADE, related_name='confidence_tracker')
+    prompt_lab = models.OneToOneField(PromptLab, on_delete=models.CASCADE, related_name='confidence_tracker')
     
     # Core confidence metrics (0.0 to 1.0)
     user_confidence = models.FloatField(default=0.0)  # How confident user is in their feedback
@@ -333,13 +334,13 @@ class SessionConfidence(models.Model):
         return not self.is_learning_sufficient()
     
     def __str__(self):
-        return f"{self.session.name} - U:{self.user_confidence:.2f} S:{self.system_confidence:.2f}"
+        return f"{self.prompt_lab.name} - U:{self.user_confidence:.2f} S:{self.system_confidence:.2f}"
 
 
 class ExtractedPreference(models.Model):
     """Automatically extracted user preferences from feedback patterns"""
     
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='extracted_preferences')
+    prompt_lab = models.ForeignKey(PromptLab, on_delete=models.CASCADE, related_name='extracted_preferences')
     
     # Source tracking
     source_feedback_ids = models.JSONField(default=list)  # List of feedback IDs that led to this preference
@@ -362,7 +363,7 @@ class ExtractedPreference(models.Model):
     class Meta:
         ordering = ['-confidence_score', '-updated_at']
         indexes = [
-            models.Index(fields=['session', 'preference_category']),
+            models.Index(fields=['prompt_lab', 'preference_category']),
             models.Index(fields=['confidence_score']),
         ]
     
@@ -380,4 +381,4 @@ class ExtractedPreference(models.Model):
         super().save(*args, **kwargs)
     
     def __str__(self):
-        return f"{self.session.name} - {self.preference_category}: {self.preference_text[:50]}... ({self.confidence_score:.2f})"
+        return f"{self.prompt_lab.name} - {self.preference_category}: {self.preference_text[:50]}... ({self.confidence_score:.2f})"

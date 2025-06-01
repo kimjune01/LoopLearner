@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from django.contrib.auth.models import User
 from unittest.mock import patch, MagicMock
-from core.models import Session, SystemPrompt, UserFeedback, Email, Draft
+from core.models import PromptLab, SystemPrompt, UserFeedback, Email, Draft
 
 
 class ManualOptimizationTriggerTests(APITestCase):
@@ -16,15 +16,15 @@ class ManualOptimizationTriggerTests(APITestCase):
         self.user = User.objects.create_user(username='testuser', password='testpass')
         self.client.force_authenticate(user=self.user)
         
-        # Create session with feedback
-        self.session = Session.objects.create(
-            name="Test Session",
+        # Create prompt lab with feedback
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="Test Description"
         )
         
         # Create system prompt
         self.system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="You are a helpful assistant.",
             version=1,
             is_active=True
@@ -33,7 +33,7 @@ class ManualOptimizationTriggerTests(APITestCase):
         # Create some feedback to optimize from
         for i in range(5):
             email = Email.objects.create(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 subject=f"Test Email {i}",
                 body=f"Test body {i}",
                 sender="test@example.com",
@@ -60,7 +60,7 @@ class ManualOptimizationTriggerTests(APITestCase):
             mock_result = MagicMock()
             mock_result.success = True
             mock_result.new_prompt = SystemPrompt.objects.create(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 content="Improved prompt content",
                 version=2,
                 is_active=False
@@ -72,7 +72,7 @@ class ManualOptimizationTriggerTests(APITestCase):
             mock_orchestrator.return_value = mock_instance
             
             response = self.client.post(url, {
-                'session_id': self.session.id
+                'prompt_lab_id': self.prompt_lab.id
             }, format='json')
             
             self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -85,18 +85,18 @@ class ManualOptimizationTriggerTests(APITestCase):
             # Verify orchestrator was called correctly
             mock_instance.optimize_prompt.assert_called_once()
             call_args = mock_instance.optimize_prompt.call_args[0]
-            self.assertEqual(call_args[0], self.session)
+            self.assertEqual(call_args[0], self.prompt_lab)
             self.assertEqual(len(call_args[1]), 5)  # 5 feedback items
     
     def test_manual_optimization_trigger_no_feedback(self):
         """Test optimization trigger with no feedback."""
-        # Create session without feedback
-        empty_session = Session.objects.create(
-            name="Empty Session",
+        # Create prompt lab without feedback
+        empty_session = PromptLab.objects.create(
+            name="Empty PromptLab",
             description="No feedback yet"
         )
         SystemPrompt.objects.create(
-            session=empty_session,
+            prompt_lab=empty_session,
             content="Initial prompt",
             version=1,
             is_active=True
@@ -104,17 +104,17 @@ class ManualOptimizationTriggerTests(APITestCase):
         
         url = reverse('trigger-optimization')
         response = self.client.post(url, {
-            'session_id': empty_session.id
+            'prompt_lab_id': empty_session.id
         }, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data['error'], 'No feedback available for optimization')
     
     def test_manual_optimization_trigger_invalid_session(self):
-        """Test optimization trigger with invalid session."""
+        """Test optimization trigger with invalid ."""
         url = reverse('trigger-optimization')
         response = self.client.post(url, {
-            'session_id': 99999
+            'prompt_lab_id': 99999
         }, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -128,11 +128,11 @@ class ManualOptimizationTriggerTests(APITestCase):
         
         url = reverse('trigger-optimization')
         response = self.client.post(url, {
-            'session_id': self.session.id
+            'prompt_lab_id': self.prompt_lab.id
         }, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], 'No active prompt found for session')
+        self.assertEqual(response.data['error'], 'No active prompt found for ')
     
     def test_manual_optimization_trigger_optimization_fails(self):
         """Test when optimization fails."""
@@ -148,7 +148,7 @@ class ManualOptimizationTriggerTests(APITestCase):
             mock_orchestrator.return_value = mock_instance
             
             response = self.client.post(url, {
-                'session_id': self.session.id
+                'prompt_lab_id': self.prompt_lab.id
             }, format='json')
             
             self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -167,7 +167,7 @@ class ManualOptimizationTriggerTests(APITestCase):
             mock_result = MagicMock()
             mock_result.success = True
             mock_result.new_prompt = SystemPrompt.objects.create(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 content="Improved prompt",
                 version=2,
                 is_active=False
@@ -178,25 +178,25 @@ class ManualOptimizationTriggerTests(APITestCase):
             mock_orchestrator.return_value = mock_instance
             
             # Check initial prompt count
-            initial_count = SystemPrompt.objects.filter(session=self.session).count()
+            initial_count = SystemPrompt.objects.filter(prompt_lab=self.prompt_lab).count()
             
             response = self.client.post(url, {
-                'session_id': self.session.id
+                'prompt_lab_id': self.prompt_lab.id
             }, format='json')
             
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             
             # Verify new prompt was created
-            final_count = SystemPrompt.objects.filter(session=self.session).count()
+            final_count = SystemPrompt.objects.filter(prompt_lab=self.prompt_lab).count()
             self.assertEqual(final_count, initial_count + 1)
             
             # Verify the new prompt details
             new_prompt = SystemPrompt.objects.filter(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 version=2
             ).first()
             self.assertIsNotNone(new_prompt)
             self.assertEqual(new_prompt.content, "Improved prompt")
             self.assertFalse(new_prompt.is_active)  # Not active until validated
-            # Verify it's a new version for the same session
-            self.assertEqual(new_prompt.session, self.session)
+            # Verify it's a new version for the same 
+            self.assertEqual(new_prompt.session, self.prompt_lab)

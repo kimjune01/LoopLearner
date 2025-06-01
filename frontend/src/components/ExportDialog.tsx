@@ -1,19 +1,19 @@
 /**
  * Export Dialog Component
- * Provides comprehensive export options for sessions, datasets, and system data
+ * Provides comprehensive export options for prompt labs, datasets, and system data
  */
 
 import React, { useState } from 'react';
 import { exportService } from '../services/exportService';
 import type { ExportOptions } from '../services/exportService';
-import type { Session } from '../types/session';
+import type { PromptLab } from '../types/promptLab';
 import type { EvaluationDataset } from '../types/evaluation';
 
 interface ExportDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  exportType: 'session' | 'dataset' | 'system';
-  session?: Session;
+  exportType: 'promptLab' | 'dataset' | 'system';
+  promptLab?: PromptLab;
   dataset?: EvaluationDataset;
 }
 
@@ -21,7 +21,7 @@ const ExportDialog: React.FC<ExportDialogProps> = ({
   isOpen,
   onClose,
   exportType,
-  session,
+  promptLab,
   dataset
 }) => {
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
@@ -59,9 +59,9 @@ const ExportDialog: React.FC<ExportDialogProps> = ({
       };
 
       switch (exportType) {
-        case 'session':
-          if (!session) throw new Error('Session data required');
-          await exportService.exportSession(session.id, options);
+        case 'promptLab':
+          if (!promptLab) throw new Error('Prompt lab data required');
+          await exportService.exportPromptLab(promptLab.id, options);
           break;
         
         case 'dataset':
@@ -88,8 +88,8 @@ const ExportDialog: React.FC<ExportDialogProps> = ({
 
   const getTitle = () => {
     switch (exportType) {
-      case 'session':
-        return `Export Session: ${session?.name || 'Unknown'}`;
+      case 'promptLab':
+        return `Export Prompt Lab: ${promptLab?.name || 'Unknown'}`;
       case 'dataset':
         return `Export Dataset: ${dataset?.name || 'Unknown'}`;
       case 'system':
@@ -101,8 +101,8 @@ const ExportDialog: React.FC<ExportDialogProps> = ({
 
   const getDescription = () => {
     switch (exportType) {
-      case 'session':
-        return 'Export complete session data including prompts, emails, feedback, and preferences.';
+      case 'promptLab':
+        return 'Export complete prompt lab data including prompts, emails, feedback, and preferences.';
       case 'dataset':
         return 'Export evaluation dataset structure and test cases.';
       case 'system':
@@ -114,7 +114,7 @@ const ExportDialog: React.FC<ExportDialogProps> = ({
 
   const getFormatOptions = () => {
     switch (exportType) {
-      case 'session':
+      case 'promptLab':
         return ['json', 'csv', 'txt', 'md'];
       case 'dataset':
         return ['json', 'csv'];
@@ -172,8 +172,8 @@ const ExportDialog: React.FC<ExportDialogProps> = ({
               </div>
             </div>
 
-            {/* Content Options (Session only) */}
-            {exportType === 'session' && (
+            {/* Content Options (Prompt Lab only) */}
+            {exportType === 'promptLab' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Include in Export
@@ -207,8 +207,8 @@ const ExportDialog: React.FC<ExportDialogProps> = ({
               </div>
             )}
 
-            {/* Date Range Filter (Session only) */}
-            {exportType === 'session' && (
+            {/* Date Range Filter (Prompt Lab only) */}
+            {exportType === 'promptLab' && (
               <div>
                 <label className="flex items-center space-x-2 cursor-pointer mb-3">
                   <input

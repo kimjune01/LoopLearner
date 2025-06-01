@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from django.contrib.auth.models import User
 from unittest.mock import patch, MagicMock
-from core.models import Session, SystemPrompt
+from core.models import PromptLab, SystemPrompt
 
 
 class AutomatedOptimizationAPITests(APITestCase):
@@ -16,14 +16,14 @@ class AutomatedOptimizationAPITests(APITestCase):
         self.user = User.objects.create_user(username='testuser', password='testpass')
         self.client.force_authenticate(user=self.user)
         
-        # Create test session
-        self.session = Session.objects.create(
-            name="Test Session",
+        # Create test 
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="Test Description"
         )
         
         self.system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="You are a helpful assistant.",
             version=1,
             is_active=True
@@ -68,7 +68,7 @@ class AutomatedOptimizationAPITests(APITestCase):
         from core.models import Email, Draft, UserFeedback
         for i in range(5):
             email = Email.objects.create(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 subject=f"Test Email {i}",
                 body=f"Test body {i}",
                 sender="test@example.com"
@@ -90,7 +90,7 @@ class AutomatedOptimizationAPITests(APITestCase):
         data = response.json()
         self.assertEqual(data['action'], 'immediate_check')
         self.assertIsInstance(data['results'], list)
-        # At least one session should be checked
+        # At least one  should be checked
         self.assertGreaterEqual(len(data['results']), 1)
     
     def test_start_scheduler(self):

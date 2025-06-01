@@ -33,29 +33,29 @@ from .demo_controller import (
     demo_health_check,
 )
 from .session_controller import (
-    SessionListView,
-    SessionDetailView,
-    SessionExportView,
-    SessionImportView,
-    SessionDuplicateView,
-    SessionStatsView,
+    PromptLabListView,
+    PromptLabDetailView,
+    PromptLabExportView,
+    PromptLabImportView,
+    PromptLabDuplicateView,
+    PromptLabStatsView,
     DraftReasoningFactorsView,
     BulkAcceptReasonsView,
     BulkRejectReasonsView,
     BulkRateReasonsView,
     QuickRateReasonView,
-    SessionConfidenceView,
+    PromptLabConfidenceView,
     RecalculateConfidenceView,
     ConfidenceHistoryView,
     ConfidenceThresholdsView,
     ExtractPreferencesView,
-    SessionPreferencesView,
-    UpdateSessionPreferenceView,
+    PromptLabPreferencesView,
+    UpdatePromptLabPreferenceView,
     ConvergenceAssessmentView,
     ForceConvergenceView,
     ConvergenceHistoryView,
-    SessionColdStartView,
-    SessionApplyPreferencesView,
+    PromptLabColdStartView,
+    PromptLabApplyPreferencesView,
 )
 from .evaluation_controller import (
     EvaluationDatasetListView,
@@ -75,49 +75,49 @@ from .evaluation_controller import (
 )
 
 urlpatterns = [
-    # Session management endpoints
-    path('sessions/', SessionListView.as_view(), name='session-list'),
-    path('sessions/<uuid:session_id>/', SessionDetailView.as_view(), name='session-detail'),
-    path('sessions/<uuid:session_id>/export/', SessionExportView.as_view(), name='session-export'),
-    path('sessions/import/', SessionImportView.as_view(), name='session-import'),
-    path('sessions/<uuid:session_id>/duplicate/', SessionDuplicateView.as_view(), name='session-duplicate'),
-    path('sessions/<uuid:session_id>/stats/', SessionStatsView.as_view(), name='session-stats'),
+    # PromptLab management endpoints
+    path('prompt-labs/', PromptLabListView.as_view(), name='prompt-lab-list'),
+    path('prompt-labs/<uuid:prompt_lab_id>/', PromptLabDetailView.as_view(), name='prompt-lab-detail'),
+    path('prompt-labs/<uuid:session_id>/export/', PromptLabExportView.as_view(), name='prompt-lab-export'),
+    path('prompt-labs/import/', PromptLabImportView.as_view(), name='prompt-lab-import'),
+    path('prompt-labs/<uuid:session_id>/duplicate/', PromptLabDuplicateView.as_view(), name='prompt-lab-duplicate'),
+    path('prompt-labs/<uuid:session_id>/stats/', PromptLabStatsView.as_view(), name='prompt-lab-stats'),
     
-    # Session-scoped email endpoints
-    path('sessions/<uuid:session_id>/generate-synthetic-email/', GenerateSyntheticEmailView.as_view(), name='session-generate-synthetic-email'),
-    path('sessions/<uuid:session_id>/emails/<int:email_id>/generate-drafts/', CreateDraftView.as_view(), name='session-generate-drafts'),
+    # PromptLab-scoped email endpoints
+    path('prompt-labs/<uuid:session_id>/generate-synthetic-email/', GenerateSyntheticEmailView.as_view(), name='prompt-lab-generate-synthetic-email'),
+    path('prompt-labs/<uuid:session_id>/emails/<int:email_id>/generate-drafts/', CreateDraftView.as_view(), name='prompt-lab-generate-drafts'),
     
-    # Session-scoped feedback endpoints
-    path('sessions/<uuid:session_id>/drafts/<int:draft_id>/submit-feedback/', SubmitFeedbackView.as_view(), name='session-submit-feedback'),
-    path('sessions/<uuid:session_id>/drafts/<int:draft_id>/reasoning-factors/', DraftReasoningFactorsView.as_view(), name='draft-reasoning-factors'),
-    path('sessions/<uuid:session_id>/reasons/<int:reason_id>/rate-reasoning/', RateReasoningFactorsView.as_view(), name='session-rate-reasoning'),
+    # PromptLab-scoped feedback endpoints
+    path('prompt-labs/<uuid:session_id>/drafts/<int:draft_id>/submit-feedback/', SubmitFeedbackView.as_view(), name='prompt-lab-submit-feedback'),
+    path('prompt-labs/<uuid:session_id>/drafts/<int:draft_id>/reasoning-factors/', DraftReasoningFactorsView.as_view(), name='draft-reasoning-factors'),
+    path('prompt-labs/<uuid:session_id>/reasons/<int:reason_id>/rate-reasoning/', RateReasoningFactorsView.as_view(), name='prompt-lab-rate-reasoning'),
     
     # Quick actions for reasoning factors
-    path('sessions/<uuid:session_id>/drafts/<int:draft_id>/bulk-accept-reasons/', BulkAcceptReasonsView.as_view(), name='bulk-accept-reasons'),
-    path('sessions/<uuid:session_id>/drafts/<int:draft_id>/bulk-reject-reasons/', BulkRejectReasonsView.as_view(), name='bulk-reject-reasons'),
-    path('sessions/<uuid:session_id>/drafts/<int:draft_id>/bulk-rate-reasons/', BulkRateReasonsView.as_view(), name='bulk-rate-reasons'),
-    path('sessions/<uuid:session_id>/reasons/<int:reason_id>/quick-rate/', QuickRateReasonView.as_view(), name='quick-rate-reason'),
+    path('prompt-labs/<uuid:session_id>/drafts/<int:draft_id>/bulk-accept-reasons/', BulkAcceptReasonsView.as_view(), name='bulk-accept-reasons'),
+    path('prompt-labs/<uuid:session_id>/drafts/<int:draft_id>/bulk-reject-reasons/', BulkRejectReasonsView.as_view(), name='bulk-reject-reasons'),
+    path('prompt-labs/<uuid:session_id>/drafts/<int:draft_id>/bulk-rate-reasons/', BulkRateReasonsView.as_view(), name='bulk-rate-reasons'),
+    path('prompt-labs/<uuid:session_id>/reasons/<int:reason_id>/quick-rate/', QuickRateReasonView.as_view(), name='quick-rate-reason'),
     
     # Confidence tracking endpoints
-    path('sessions/<uuid:session_id>/confidence/', SessionConfidenceView.as_view(), name='session-confidence'),
-    path('sessions/<uuid:session_id>/confidence/recalculate/', RecalculateConfidenceView.as_view(), name='recalculate-confidence'),
-    path('sessions/<uuid:session_id>/confidence/history/', ConfidenceHistoryView.as_view(), name='confidence-history'),
-    path('sessions/<uuid:session_id>/confidence/thresholds/', ConfidenceThresholdsView.as_view(), name='confidence-thresholds'),
+    path('prompt-labs/<uuid:session_id>/confidence/', PromptLabConfidenceView.as_view(), name='prompt-lab-confidence'),
+    path('prompt-labs/<uuid:session_id>/confidence/recalculate/', RecalculateConfidenceView.as_view(), name='recalculate-confidence'),
+    path('prompt-labs/<uuid:session_id>/confidence/history/', ConfidenceHistoryView.as_view(), name='confidence-history'),
+    path('prompt-labs/<uuid:session_id>/confidence/thresholds/', ConfidenceThresholdsView.as_view(), name='confidence-thresholds'),
     
     # Preference extraction endpoints
-    path('sessions/<uuid:session_id>/preferences/extract/', ExtractPreferencesView.as_view(), name='extract-preferences'),
-    path('sessions/<uuid:session_id>/preferences/', SessionPreferencesView.as_view(), name='session-preferences'),
-    path('sessions/<uuid:session_id>/preferences/update/', UpdateSessionPreferenceView.as_view(), name='update-session-preference'),
+    path('prompt-labs/<uuid:session_id>/preferences/extract/', ExtractPreferencesView.as_view(), name='extract-preferences'),
+    path('prompt-labs/<uuid:session_id>/preferences/', PromptLabPreferencesView.as_view(), name='prompt-lab-preferences'),
+    path('prompt-labs/<uuid:session_id>/preferences/update/', UpdatePromptLabPreferenceView.as_view(), name='update-prompt-lab-preference'),
     
     # Convergence detection endpoints
-    path('sessions/<uuid:session_id>/convergence/', ConvergenceAssessmentView.as_view(), name='convergence-assessment'),
-    path('sessions/<uuid:session_id>/convergence/force/', ForceConvergenceView.as_view(), name='force-convergence'),
-    path('sessions/<uuid:session_id>/convergence/history/', ConvergenceHistoryView.as_view(), name='convergence-history'),
+    path('prompt-labs/<uuid:session_id>/convergence/', ConvergenceAssessmentView.as_view(), name='convergence-assessment'),
+    path('prompt-labs/<uuid:session_id>/convergence/force/', ForceConvergenceView.as_view(), name='force-convergence'),
+    path('prompt-labs/<uuid:session_id>/convergence/history/', ConvergenceHistoryView.as_view(), name='convergence-history'),
     
     # Cold start endpoints
-    path('sessions/<uuid:session_id>/cold-start/', SessionColdStartView.as_view(), name='session-cold-start'),
-    path('sessions/<uuid:session_id>/cold-start/status/', SessionColdStartView.as_view(), name='session-cold-start-status'),
-    path('sessions/<uuid:session_id>/apply-preferences/', SessionApplyPreferencesView.as_view(), name='session-apply-preferences'),
+    path('prompt-labs/<uuid:session_id>/cold-start/', PromptLabColdStartView.as_view(), name='prompt-lab-cold-start'),
+    path('prompt-labs/<uuid:session_id>/cold-start/status/', PromptLabColdStartView.as_view(), name='prompt-lab-cold-start-status'),
+    path('prompt-labs/<uuid:session_id>/apply-preferences/', PromptLabApplyPreferencesView.as_view(), name='prompt-lab-apply-preferences'),
     
     # Legacy endpoints (for backward compatibility)
     path('generate-synthetic-email/', GenerateSyntheticEmailView.as_view(), name='generate-synthetic-email'),

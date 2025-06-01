@@ -9,7 +9,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
-from core.models import Session, SystemPrompt, Email, Draft, UserFeedback, SessionConfidence
+from core.models import PromptLab, SystemPrompt, Email, Draft, UserFeedback, PromptLabConfidence
 from unittest.mock import patch, MagicMock
 
 
@@ -18,26 +18,26 @@ class TestConvergenceDetectionModels(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Convergence Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Convergence Test PromptLab",
             description="Session for testing convergence detection"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
         )
     
-    def test_session_has_convergence_related_fields(self):
-        """Test that Session model has fields needed for convergence tracking"""
-        # Session should track optimization iterations and feedback counts
-        self.assertTrue(hasattr(self.session, 'optimization_iterations'))
-        self.assertTrue(hasattr(self.session, 'total_feedback_collected'))
+    def test_prompt_lab_has_convergence_related_fields(self):
+        """Test that PromptLab model has fields needed for convergence tracking"""
+        # PromptLab should track optimization iterations and feedback counts
+        self.assertTrue(hasattr(self.prompt_lab, 'optimization_iterations'))
+        self.assertTrue(hasattr(self.prompt_lab, 'total_feedback_collected'))
         
         # Should track when optimization was last run
-        self.assertTrue(hasattr(self.session, 'updated_at'))
+        self.assertTrue(hasattr(self.prompt_lab, 'updated_at'))
     
     def test_system_prompt_has_performance_tracking(self):
         """Test that SystemPrompt tracks performance for convergence"""
@@ -47,12 +47,12 @@ class TestConvergenceDetectionModels(TestCase):
         # Default performance score should be None (not yet calculated)
         self.assertIsNone(self.prompt.performance_score)
     
-    def test_session_confidence_supports_convergence_detection(self):
-        """Test that SessionConfidence model supports convergence detection"""
-        from core.models import SessionConfidence
+    def test_prompt_lab_confidence_supports_convergence_detection(self):
+        """Test that PromptLabConfidence model supports convergence detection"""
+        from core.models import PromptLabConfidence
         
-        confidence = SessionConfidence.objects.create(
-            session=self.session,
+        confidence = PromptLabConfidence.objects.create(
+            prompt_lab=self.prompt_lab,
             user_confidence=0.85,
             system_confidence=0.80,
             feedback_consistency_score=0.90,
@@ -86,13 +86,13 @@ class TestConvergenceDetectionService(TestCase):
     
     def setUp(self):
         """Set up test data with optimization history"""
-        self.session = Session.objects.create(
+        self.prompt_lab = PromptLab.objects.create(
             name="Convergence Algorithm Test",
             description="Session for testing convergence algorithms"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
@@ -120,14 +120,14 @@ class TestConvergenceDetectionService(TestCase):
         
         for i, score in enumerate(performance_history):
             SystemPrompt.objects.create(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 content=f"Prompt version {i+1}",
                 version=i+1,
                 performance_score=score,
                 is_active=(i == len(performance_history)-1)
             )
         
-        plateau_detected = detector.detect_performance_plateau(self.session)
+        plateau_detected = detector.detect_performance_plateau(self.prompt_lab)
         
         # Should detect that performance has plateaued
         self.assertIsInstance(plateau_detected, bool)
@@ -151,9 +151,9 @@ class TestConvergenceDetectionService(TestCase):
         self.assertTrue(hasattr(detector, 'check_confidence_convergence'))
         
         # Create high-confidence scenario (converged)
-        from core.models import SessionConfidence
-        high_confidence = SessionConfidence.objects.create(
-            session=self.session,
+        from core.models import PromptLabConfidence
+        high_confidence = PromptLabConfidence.objects.create(
+            prompt_lab=self.prompt_lab,
             user_confidence=0.92,
             system_confidence=0.88,
             feedback_consistency_score=0.95,
@@ -164,7 +164,7 @@ class TestConvergenceDetectionService(TestCase):
             last_calculated=timezone.now()
         )
         
-        convergence_reached = detector.check_confidence_convergence(self.session)
+        convergence_reached = detector.check_confidence_convergence(self.prompt_lab)
         self.assertIsInstance(convergence_reached, bool)
         
         # With high confidence scores, should detect convergence
@@ -183,7 +183,7 @@ class TestConvergenceDetectionService(TestCase):
         # Create emails and feedback with stable patterns
         for i in range(20):
             email = Email.objects.create(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 subject=f"Test Email {i}",
                 body=f"Test body {i}",
                 sender=f"test{i}@example.com"
@@ -204,12 +204,12 @@ class TestConvergenceDetectionService(TestCase):
                 reason=f"Feedback {i}"
             )
         
-        stability_detected = detector.detect_feedback_stability(self.session)
+        stability_detected = detector.detect_feedback_stability(self.prompt_lab)
         self.assertIsInstance(stability_detected, bool)
         
         # With consistent recent feedback, should detect stability
         recent_feedback = UserFeedback.objects.filter(
-            draft__email__session=self.session
+            draft__email__prompt_lab=self.prompt_lab
         ).order_by('-created_at')[:15]  # Use same window as detector
         
         if recent_feedback.count() >= 15:
@@ -229,7 +229,7 @@ class TestConvergenceDetectionService(TestCase):
         # Should have method for overall convergence assessment
         self.assertTrue(hasattr(detector, 'assess_convergence'))
         
-        assessment = detector.assess_convergence(self.session)
+        assessment = detector.assess_convergence(self.prompt_lab)
         
         # Should return convergence assessment with details
         self.assertIsInstance(assessment, dict)
@@ -254,8 +254,8 @@ class TestConvergenceDetectionService(TestCase):
         self.assertTrue(hasattr(detector, 'check_early_stopping_criteria'))
         
         # Test scenario with insufficient data
-        early_session = Session.objects.create(
-            name="Early Session",
+        early_session = PromptLab.objects.create(
+            name="Early PromptLab",
             description="Session with minimal data",
             optimization_iterations=2,
             total_feedback_collected=5
@@ -276,7 +276,7 @@ class TestConvergenceDetectionService(TestCase):
         # Should have method to calculate convergence confidence
         self.assertTrue(hasattr(detector, 'calculate_convergence_confidence'))
         
-        confidence_score = detector.calculate_convergence_confidence(self.session)
+        confidence_score = detector.calculate_convergence_confidence(self.prompt_lab)
         
         # Should return confidence score between 0 and 1
         self.assertIsInstance(confidence_score, (int, float))
@@ -300,7 +300,7 @@ class TestConvergenceDetectionService(TestCase):
             'minimum_iterations_reached': False,
             'minimum_feedback_reached': False
         }
-        recommendations = detector.generate_recommendations(self.session, factors, False)
+        recommendations = detector.generate_recommendations(self.prompt_lab, factors, False)
         
         # Should return list of actionable recommendations
         self.assertIsInstance(recommendations, list)
@@ -318,7 +318,7 @@ class TestConvergenceDetectionService(TestCase):
             'minimum_iterations_reached': True,
             'minimum_feedback_reached': True
         }
-        converged_recommendations = detector.generate_recommendations(self.session, converged_factors, True)
+        converged_recommendations = detector.generate_recommendations(self.prompt_lab, converged_factors, True)
         
         # Should recommend stopping optimization
         stop_recommendations = [r for r in converged_recommendations if r['action'] == 'stop_optimization']
@@ -332,13 +332,13 @@ class TestConvergenceDetectionAPI(TestCase):
         """Set up test data"""
         self.client = Client()
         
-        self.session = Session.objects.create(
+        self.prompt_lab = PromptLab.objects.create(
             name="API Convergence Test",
             description="Session for testing convergence API"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
@@ -349,7 +349,7 @@ class TestConvergenceDetectionAPI(TestCase):
         # This will FAIL initially - endpoint doesn't exist yet
         
         response = self.client.get(
-            reverse('convergence-assessment', kwargs={'session_id': self.session.id})
+            reverse('convergence-assessment', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         self.assertEqual(response.status_code, 200)
@@ -357,14 +357,14 @@ class TestConvergenceDetectionAPI(TestCase):
     def test_convergence_assessment_returns_comprehensive_data(self):
         """Test that convergence endpoint returns detailed assessment"""
         response = self.client.get(
-            reverse('convergence-assessment', kwargs={'session_id': self.session.id})
+            reverse('convergence-assessment', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         self.assertEqual(response.status_code, 200)
         response_data = response.json()
         
         # Should include convergence assessment
-        self.assertIn('session_id', response_data)
+        self.assertIn('prompt_lab_id', response_data)
         self.assertIn('convergence_assessment', response_data)
         
         assessment = response_data['convergence_assessment']
@@ -378,21 +378,21 @@ class TestConvergenceDetectionAPI(TestCase):
         self.assertIn('performance_trend', response_data)
     
     def test_force_convergence_endpoint(self):
-        """Test endpoint to manually mark session as converged"""
+        """Test endpoint to manually mark  as converged"""
         force_data = {
             'reason': 'Manual convergence due to business requirements',
             'override_confidence_check': True
         }
         
         response = self.client.post(
-            reverse('force-convergence', kwargs={'session_id': self.session.id}),
+            reverse('force-convergence', kwargs={'prompt_lab_id': self.prompt_lab.id}),
             data=json.dumps(force_data),
             content_type='application/json'
         )
         
         self.assertIn(response.status_code, [200, 201])
         
-        # Should update session convergence status
+        # Should update  convergence status
         response_data = response.json()
         self.assertIn('convergence_forced', response_data)
         self.assertIn('reason', response_data)
@@ -400,21 +400,21 @@ class TestConvergenceDetectionAPI(TestCase):
     def test_convergence_history_endpoint(self):
         """Test endpoint to get convergence assessment history"""
         response = self.client.get(
-            reverse('convergence-history', kwargs={'session_id': self.session.id})
+            reverse('convergence-history', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         self.assertEqual(response.status_code, 200)
         response_data = response.json()
         
-        self.assertIn('session_id', response_data)
+        self.assertIn('prompt_lab_id', response_data)
         self.assertIn('convergence_history', response_data)
         self.assertIn('assessment_timeline', response_data)
     
     def test_convergence_api_validation_errors(self):
         """Test convergence API error handling"""
-        # Test invalid session ID
+        # Test invalid  ID
         response = self.client.get(
-            reverse('convergence-assessment', kwargs={'session_id': '00000000-0000-0000-0000-000000000000'})
+            reverse('convergence-assessment', kwargs={'prompt_lab_id': '00000000-0000-0000-0000-000000000000'})
         )
         
         self.assertEqual(response.status_code, 404)
@@ -426,7 +426,7 @@ class TestConvergenceDetectionAPI(TestCase):
         }
         
         response = self.client.post(
-            reverse('force-convergence', kwargs={'session_id': self.session.id}),
+            reverse('force-convergence', kwargs={'prompt_lab_id': self.prompt_lab.id}),
             data=json.dumps(invalid_data),
             content_type='application/json'
         )
@@ -439,13 +439,13 @@ class TestConvergenceIntegrationWithOptimization(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Integration Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Integration Test PromptLab",
             description="Session for testing convergence integration"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
@@ -476,7 +476,7 @@ class TestConvergenceIntegrationWithOptimization(TestCase):
             }
             
             # Test integration with optimization decision-making
-            assessment = detector.assess_convergence(self.session)
+            assessment = detector.assess_convergence(self.prompt_lab)
             
             # Should indicate convergence reached
             self.assertTrue(assessment['converged'])
@@ -490,15 +490,15 @@ class TestConvergenceIntegrationWithOptimization(TestCase):
             self.assertGreater(len(stop_recommendations), 0)
     
     def test_convergence_prevents_unnecessary_optimization_runs(self):
-        """Test that converged sessions don't trigger new optimization runs"""
+        """Test that converged  don't trigger new optimization runs"""
         # This would integrate with the optimization orchestrator
-        # to prevent wasted computational resources on converged sessions
+        # to prevent wasted computational resources on converged 
         
         # Create scenario with high convergence confidence
-        from core.models import SessionConfidence
+        from core.models import PromptLabConfidence
         
-        high_confidence = SessionConfidence.objects.create(
-            session=self.session,
+        high_confidence = PromptLabConfidence.objects.create(
+            prompt_lab=self.prompt_lab,
             user_confidence=0.95,
             system_confidence=0.92,
             feedback_consistency_score=0.98,
@@ -523,11 +523,11 @@ class TestConvergenceIntegrationWithOptimization(TestCase):
         self.assertTrue(hasattr(detector, 'should_check_convergence'))
         
         # Test various scenarios for convergence checking timing
-        should_check = detector.should_check_convergence(self.session)
+        should_check = detector.should_check_convergence(self.prompt_lab)
         self.assertIsInstance(should_check, bool)
         
         # Should consider factors like:
         # - Time since last check
         # - Number of new feedback items
         # - Optimization iteration count
-        # - Session activity level
+        # -  activity level

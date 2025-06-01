@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import SessionProgressVisualization from './SessionProgressVisualization';
+import PromptLabProgressVisualization from './PromptLabProgressVisualization';
 
 const ProgressVisualizationDemo: React.FC = () => {
   const [selectedDemo, setSelectedDemo] = useState<'session1' | 'session2' | 'session3'>('session1');
@@ -143,8 +143,8 @@ const ProgressVisualizationDemo: React.FC = () => {
           </div>
           
           <div className="p-6">
-            <SessionProgressVisualization 
-              sessionId={demoSessions[selectedDemo].id}
+            <PromptLabProgressVisualization 
+              promptLabId={demoSessions[selectedDemo].id}
               onOptimizationTrigger={() => {
                 console.log(`Demo optimization triggered for ${demoSessions[selectedDemo].name}`);
                 alert(`Demo: Optimization triggered for ${demoSessions[selectedDemo].name}. In a real session, this would start the optimization process.`);

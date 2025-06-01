@@ -4,7 +4,7 @@ Covers the realistic parameter value generation and case quality improvements
 """
 import pytest
 from django.test import TestCase
-from core.models import Session, SystemPrompt, EvaluationDataset
+from core.models import PromptLab, SystemPrompt, EvaluationDataset
 from app.services.evaluation_case_generator import EvaluationCaseGenerator
 
 
@@ -13,14 +13,14 @@ class ImprovedCaseGenerationTests(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="Test session for improved case generation"
         )
         
         # Email assistant prompt with EMAIL_CONTENT, RECIPIENT_INFO, SENDER_INFO parameters
         self.email_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="""You are a professional email assistant tasked with improving and polishing email drafts.
 
 <email_content>
@@ -42,14 +42,14 @@ Improve the email following professional standards.""",
         
         # Customer service prompt with different parameters
         self.customer_service_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="""You are a customer service assistant. Help {{user_name}} with their {{product_type}} issue: {{user_question}}""",
             version=1,
             parameters=['user_name', 'product_type', 'user_question']
         )
         
         self.dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Test Dataset"
         )
         

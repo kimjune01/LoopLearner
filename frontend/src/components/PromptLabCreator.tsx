@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 
-interface SessionCreatorProps {
+interface PromptLabCreatorProps {
   onCancel: () => void;
   onSubmit: (data: { name: string; description: string; initial_prompt?: string }) => void;
 }
 
-export const SessionCreator: React.FC<SessionCreatorProps> = ({ onCancel, onSubmit }) => {
+export const PromptLabCreator: React.FC<PromptLabCreatorProps> = ({ onCancel, onSubmit }) => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -18,9 +18,9 @@ export const SessionCreator: React.FC<SessionCreatorProps> = ({ onCancel, onSubm
     const newErrors: { [key: string]: string } = {};
     
     if (!formData.name.trim()) {
-      newErrors.name = 'Session name is required';
+      newErrors.name = 'Prompt lab name is required';
     } else if (formData.name.length > 200) {
-      newErrors.name = 'Session name must be less than 200 characters';
+      newErrors.name = 'Prompt lab name must be less than 200 characters';
     }
     
     if (formData.description.length > 1000) {
@@ -53,7 +53,7 @@ export const SessionCreator: React.FC<SessionCreatorProps> = ({ onCancel, onSubm
       
       await onSubmit(submitData);
     } catch (err) {
-      console.error('Error creating session:', err);
+      console.error('Error creating prompt lab:', err);
     } finally {
       setIsSubmitting(false);
     }
@@ -73,7 +73,7 @@ export const SessionCreator: React.FC<SessionCreatorProps> = ({ onCancel, onSubm
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-gray-100">
-          <h2 className="text-2xl font-bold text-gray-900">Create New Session</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Create New Prompt Lab</h2>
           <button 
             onClick={onCancel}
             className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors duration-200"
@@ -86,17 +86,17 @@ export const SessionCreator: React.FC<SessionCreatorProps> = ({ onCancel, onSubm
         
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Session Name */}
+          {/* Prompt Lab Name */}
           <div>
-            <label htmlFor="session-name" className="block text-sm font-medium text-gray-700 mb-2">
-              Session Name *
+            <label htmlFor="prompt-lab-name" className="block text-sm font-medium text-gray-700 mb-2">
+              Prompt Lab Name *
             </label>
             <input
-              id="session-name"
+              id="prompt-lab-name"
               type="text"
               value={formData.name}
               onChange={(e) => handleInputChange('name', e.target.value)}
-              placeholder="e.g., Professional Email Training"
+              placeholder="e.g., Professional Email Lab"
               className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 ${
                 errors.name ? 'border-red-300 bg-red-50' : 'border-gray-300'
               }`}
@@ -107,14 +107,14 @@ export const SessionCreator: React.FC<SessionCreatorProps> = ({ onCancel, onSubm
           
           {/* Description */}
           <div>
-            <label htmlFor="session-description" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="prompt-lab-description" className="block text-sm font-medium text-gray-700 mb-2">
               Description
             </label>
             <textarea
-              id="session-description"
+              id="prompt-lab-description"
               value={formData.description}
               onChange={(e) => handleInputChange('description', e.target.value)}
-              placeholder="Describe what this session is for and what you want to achieve..."
+              placeholder="Describe what this prompt lab is for and what you want to achieve..."
               className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 resize-none ${
                 errors.description ? 'border-red-300 bg-red-50' : 'border-gray-300'
               }`}
@@ -169,7 +169,7 @@ export const SessionCreator: React.FC<SessionCreatorProps> = ({ onCancel, onSubm
                   Creating...
                 </div>
               ) : (
-                'Create Session'
+                'Create Prompt Lab'
               )}
             </button>
           </div>

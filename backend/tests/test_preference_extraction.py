@@ -7,7 +7,7 @@ Based on Requirements FR-015: Preserve user preference statements in natural lan
 import json
 from django.test import TestCase, Client
 from django.urls import reverse
-from core.models import Session, SystemPrompt, Email, Draft, DraftReason, UserFeedback, ReasonRating, UserPreference
+from core.models import PromptLab, SystemPrompt, Email, Draft, DraftReason, UserFeedback, ReasonRating, UserPreference
 from datetime import datetime, timedelta
 
 
@@ -16,13 +16,13 @@ class TestPreferenceExtractionModels(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Preference Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Preference Test PromptLab",
             description="Session for testing preference extraction"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
@@ -33,14 +33,14 @@ class TestPreferenceExtractionModels(TestCase):
         # UserPreference already exists in core.models, verify it has the right fields
         
         preference = UserPreference.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             key="communication_style",
             value="I prefer concise, professional responses without unnecessary pleasantries",
             description="User's preferred communication style extracted from feedback patterns"
         )
         
         # Test field existence and values
-        self.assertEqual(preference.session, self.session)
+        self.assertEqual(preference.session, self.prompt_lab)
         self.assertEqual(preference.key, "communication_style")
         self.assertIn("concise", preference.value)
         self.assertTrue(preference.is_active)
@@ -51,7 +51,7 @@ class TestPreferenceExtractionModels(TestCase):
         from core.models import ExtractedPreference
         
         extracted_pref = ExtractedPreference(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             source_feedback_ids=[1, 2, 3],
             preference_category="tone",
             preference_text="User prefers professional but friendly tone",
@@ -61,7 +61,7 @@ class TestPreferenceExtractionModels(TestCase):
         )
         extracted_pref.save()
         
-        self.assertEqual(extracted_pref.session, self.session)
+        self.assertEqual(extracted_pref.session, self.prompt_lab)
         self.assertEqual(extracted_pref.preference_category, "tone")
         self.assertEqual(extracted_pref.confidence_score, 0.85)
     
@@ -70,7 +70,7 @@ class TestPreferenceExtractionModels(TestCase):
         from core.models import ExtractedPreference
         
         extracted_pref = ExtractedPreference(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             source_feedback_ids=[1, 2, 3, 4],
             preference_category="structure",
             preference_text="User prefers bullet-pointed responses with clear action items",
@@ -98,7 +98,7 @@ class TestPreferenceExtractionModels(TestCase):
         
         # Test valid confidence score
         valid_pref = ExtractedPreference(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             source_feedback_ids=[1],
             preference_category="test",
             preference_text="Test preference",
@@ -111,7 +111,7 @@ class TestPreferenceExtractionModels(TestCase):
         # Test invalid confidence > 1
         with self.assertRaises(ValidationError):
             invalid_pref = ExtractedPreference(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 source_feedback_ids=[1],
                 preference_category="test",
                 preference_text="Test preference",
@@ -124,7 +124,7 @@ class TestPreferenceExtractionModels(TestCase):
         # Test invalid confidence < 0
         with self.assertRaises(ValidationError):
             invalid_pref = ExtractedPreference(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 source_feedback_ids=[1],
                 preference_category="test",
                 preference_text="Test preference",
@@ -140,13 +140,13 @@ class TestPreferenceExtractionService(TestCase):
     
     def setUp(self):
         """Set up test data with feedback patterns"""
-        self.session = Session.objects.create(
+        self.prompt_lab = PromptLab.objects.create(
             name="Preference Extraction Test",
             description="Session for testing preference extraction"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
@@ -154,7 +154,7 @@ class TestPreferenceExtractionService(TestCase):
         
         # Create test emails and drafts
         self.email1 = Email.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             subject="Test Email 1",
             body="Test body 1",
             sender="test1@example.com"
@@ -196,7 +196,7 @@ class TestPreferenceExtractionService(TestCase):
         # Should have method to extract preferences from feedback text
         self.assertTrue(hasattr(extractor, 'extract_from_feedback_text'))
         
-        preferences = extractor.extract_from_feedback_text(self.session)
+        preferences = extractor.extract_from_feedback_text(self.prompt_lab)
         
         # Should return list of extracted preferences
         self.assertIsInstance(preferences, list)
@@ -244,7 +244,7 @@ class TestPreferenceExtractionService(TestCase):
         # Should have method to extract from reasoning patterns
         self.assertTrue(hasattr(extractor, 'extract_from_reasoning_patterns'))
         
-        patterns = extractor.extract_from_reasoning_patterns(self.session)
+        patterns = extractor.extract_from_reasoning_patterns(self.prompt_lab)
         
         # Should identify preference patterns
         self.assertIsInstance(patterns, list)
@@ -256,7 +256,7 @@ class TestPreferenceExtractionService(TestCase):
         # Create pattern of feedback actions
         for i in range(5):
             email = Email.objects.create(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 subject=f"Email {i}",
                 body=f"Body {i}",
                 sender=f"test{i}@example.com"
@@ -282,7 +282,7 @@ class TestPreferenceExtractionService(TestCase):
         # Should have method to extract from action patterns
         self.assertTrue(hasattr(extractor, 'extract_from_action_patterns'))
         
-        action_prefs = extractor.extract_from_action_patterns(self.session)
+        action_prefs = extractor.extract_from_action_patterns(self.prompt_lab)
         
         # Should identify patterns in user behavior
         self.assertIsInstance(action_prefs, list)
@@ -296,7 +296,7 @@ class TestPreferenceExtractionService(TestCase):
         # Should have method to consolidate preferences
         self.assertTrue(hasattr(extractor, 'extract_all_preferences'))
         
-        all_preferences = extractor.extract_all_preferences(self.session)
+        all_preferences = extractor.extract_all_preferences(self.prompt_lab)
         
         # Should return consolidated, ranked preferences
         self.assertIsInstance(all_preferences, list)
@@ -321,7 +321,7 @@ class TestPreferenceExtractionService(TestCase):
             )
         
         extractor = PreferenceExtractor()
-        preferences = extractor.extract_all_preferences(self.session)
+        preferences = extractor.extract_all_preferences(self.prompt_lab)
         
         # Should have high confidence for consistent patterns
         if preferences:
@@ -361,13 +361,13 @@ class TestPreferenceExtractionAPI(TestCase):
         """Set up test data"""
         self.client = Client()
         
-        self.session = Session.objects.create(
+        self.prompt_lab = PromptLab.objects.create(
             name="API Preference Test",
             description="Session for testing preference API"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
@@ -378,7 +378,7 @@ class TestPreferenceExtractionAPI(TestCase):
         # This will FAIL initially - endpoint doesn't exist yet
         
         response = self.client.post(
-            reverse('extract-preferences', kwargs={'session_id': self.session.id}),
+            reverse('extract-preferences', kwargs={'prompt_lab_id': self.prompt_lab.id}),
             data=json.dumps({}),
             content_type='application/json'
         )
@@ -388,7 +388,7 @@ class TestPreferenceExtractionAPI(TestCase):
     def test_extract_preferences_returns_extracted_preferences(self):
         """Test that extraction endpoint returns discovered preferences"""
         response = self.client.post(
-            reverse('extract-preferences', kwargs={'session_id': self.session.id}),
+            reverse('extract-preferences', kwargs={'prompt_lab_id': self.prompt_lab.id}),
             data=json.dumps({}),
             content_type='application/json'
         )
@@ -407,9 +407,9 @@ class TestPreferenceExtractionAPI(TestCase):
         self.assertIn('categories_discovered', summary)
     
     def test_get_session_preferences_endpoint(self):
-        """Test endpoint to get all preferences for a session"""
+        """Test endpoint to get all preferences for a """
         response = self.client.get(
-            reverse('session-preferences', kwargs={'session_id': self.session.id})
+            reverse('prompt-lab-preferences', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         self.assertEqual(response.status_code, 200)
@@ -417,7 +417,7 @@ class TestPreferenceExtractionAPI(TestCase):
         
         self.assertIn('manual_preferences', response_data)
         self.assertIn('extracted_preferences', response_data)
-        self.assertIn('session_id', response_data)
+        self.assertIn('prompt_lab_id', response_data)
     
     def test_update_preference_endpoint(self):
         """Test endpoint to manually add/update preferences"""
@@ -428,7 +428,7 @@ class TestPreferenceExtractionAPI(TestCase):
         }
         
         response = self.client.post(
-            reverse('update-session-preference', kwargs={'session_id': self.session.id}),
+            reverse('update-prompt-lab-preference', kwargs={'prompt_lab_id': self.prompt_lab.id}),
             data=json.dumps(preference_data),
             content_type='application/json'
         )
@@ -437,7 +437,7 @@ class TestPreferenceExtractionAPI(TestCase):
         
         # Verify preference was saved
         preference = UserPreference.objects.filter(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             key='communication_style'
         ).first()
         
@@ -446,9 +446,9 @@ class TestPreferenceExtractionAPI(TestCase):
     
     def test_preference_api_validation_errors(self):
         """Test preference API error handling"""
-        # Test invalid session ID
+        # Test invalid prompt lab ID
         response = self.client.get(
-            reverse('session-preferences', kwargs={'session_id': '00000000-0000-0000-0000-000000000000'})
+            reverse('prompt-lab-preferences', kwargs={'prompt_lab_id': '00000000-0000-0000-0000-000000000000'})
         )
         
         self.assertEqual(response.status_code, 404)
@@ -460,7 +460,7 @@ class TestPreferenceExtractionAPI(TestCase):
         }
         
         response = self.client.post(
-            reverse('update-session-preference', kwargs={'session_id': self.session.id}),
+            reverse('update-prompt-lab-preference', kwargs={'prompt_lab_id': self.prompt_lab.id}),
             data=json.dumps(invalid_data),
             content_type='application/json'
         )
@@ -473,13 +473,13 @@ class TestPreferenceIntegrationWithPrompts(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Integration Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Integration Test PromptLab",
             description="Session for testing preference integration"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="You are a helpful email assistant.",
             version=1,
             is_active=True
@@ -491,14 +491,14 @@ class TestPreferenceIntegrationWithPrompts(TestCase):
         
         # Create some preferences
         UserPreference.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             key="tone",
             value="Professional but friendly",
             description="User's preferred tone"
         )
         
         UserPreference.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             key="structure",
             value="Use bullet points for action items",
             description="User's preferred structure"
@@ -511,7 +511,7 @@ class TestPreferenceIntegrationWithPrompts(TestCase):
         
         enhanced_prompt = extractor.enhance_prompt_with_preferences(
             self.prompt.content, 
-            self.session
+            self.prompt_lab
         )
         
         # Enhanced prompt should include preference information
@@ -529,11 +529,11 @@ class TestPreferenceIntegrationWithPrompts(TestCase):
         self.assertTrue(hasattr(extractor, 'detect_preference_changes'))
         
         # Initial extraction
-        initial_prefs = extractor.extract_all_preferences(self.session)
+        initial_prefs = extractor.extract_all_preferences(self.prompt_lab)
         
         # Simulate new feedback that might change preferences
         # This would trigger re-extraction and comparison
-        changes_detected = extractor.detect_preference_changes(self.session)
+        changes_detected = extractor.detect_preference_changes(self.prompt_lab)
         
         # Should return boolean indicating if changes were detected
         self.assertIsInstance(changes_detected, bool)

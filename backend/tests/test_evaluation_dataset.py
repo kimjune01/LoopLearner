@@ -6,7 +6,7 @@ import json
 import pytest
 from django.test import TestCase, Client
 from django.urls import reverse
-from core.models import Session, SystemPrompt, EvaluationDataset, EvaluationCase
+from core.models import PromptLab, SystemPrompt, EvaluationDataset, EvaluationCase
 
 
 class EvaluationDatasetStoryTests(TestCase):
@@ -15,12 +15,12 @@ class EvaluationDatasetStoryTests(TestCase):
     def setUp(self):
         """Set up test data"""
         self.client = Client()
-        self.session = Session.objects.create(
-            name="Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="A test session for evaluation"
         )
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="You are a helpful assistant.",
             version=1,
             is_active=True
@@ -28,13 +28,13 @@ class EvaluationDatasetStoryTests(TestCase):
     
     def test_create_evaluation_dataset(self):
         """
-        Test: Given a session with a prompt, when I create an evaluation dataset,
+        Test: Given a  with a prompt, when I create an evaluation dataset,
         then the dataset is saved with proper structure
         """
         # This test should initially fail because we haven't implemented the API yet
         url = '/api/evaluations/datasets/'
         data = {
-            'session_id': str(self.session.id),
+            'prompt_lab_id': str(self.prompt_lab.id),
             'name': 'Customer Support Evaluation',
             'description': 'Test cases for customer support responses'
         }
@@ -45,13 +45,13 @@ class EvaluationDatasetStoryTests(TestCase):
         self.assertEqual(response.status_code, 201)
         
         # Verify dataset was created
-        datasets = EvaluationDataset.objects.filter(session=self.session)
+        datasets = EvaluationDataset.objects.filter(prompt_lab=self.prompt_lab)
         self.assertEqual(datasets.count(), 1)
         
         dataset = datasets.first()
         self.assertEqual(dataset.name, 'Customer Support Evaluation')
         self.assertEqual(dataset.description, 'Test cases for customer support responses')
-        self.assertEqual(dataset.session, self.session)
+        self.assertEqual(dataset.session, self.prompt_lab)
         
         # Verify response data
         response_data = response.json()
@@ -65,7 +65,7 @@ class EvaluationDatasetStoryTests(TestCase):
         """
         # Create dataset first
         dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Test Dataset"
         )
         
@@ -104,7 +104,7 @@ class EvaluationDatasetStoryTests(TestCase):
         """
         # Create dataset first
         dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Imported Dataset"
         )
         
@@ -148,28 +148,28 @@ class EvaluationDatasetStoryTests(TestCase):
     
     def test_list_datasets_for_session(self):
         """
-        Test: Given multiple datasets, when I request datasets for a session,
-        then only datasets for that session are returned
+        Test: Given multiple datasets, when I request datasets for a prompt lab,
+        then only datasets for that  are returned
         """
-        # Create datasets for our session
+        # Create datasets for our 
         dataset1 = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Dataset 1"
         )
         dataset2 = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Dataset 2"
         )
         
-        # Create dataset for different session
-        other_session = Session.objects.create(name="Other Session")
+        # Create dataset for different 
+        other_session = PromptLab.objects.create(name="Other PromptLab")
         other_dataset = EvaluationDataset.objects.create(
-            session=other_session,
+            prompt_lab=other_session,
             name="Other Dataset"
         )
         
         # This test should initially fail because we haven't implemented the API yet
-        url = f'/api/evaluations/datasets/?session_id={self.session.id}'
+        url = f'/api/evaluations/datasets/?session_id={self.prompt_lab.id}'
         
         response = self.client.get(url)
         
@@ -193,7 +193,7 @@ class EvaluationDatasetStoryTests(TestCase):
         """
         # Create dataset with cases
         dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Test Dataset",
             description="A test dataset"
         )

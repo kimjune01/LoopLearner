@@ -17,8 +17,16 @@ const EVALUATION_API_URL = `${API_BASE_URL}/evaluations`;
 
 export const evaluationService = {
   // Dataset operations
-  async getDatasets(): Promise<EvaluationDataset[]> {
-    const response = await fetch(`${EVALUATION_API_URL}/datasets/`);
+  async getDatasets(promptLabId?: string, filterByParams?: boolean): Promise<EvaluationDataset[]> {
+    const url = new URL(`${EVALUATION_API_URL}/datasets/`);
+    if (promptLabId) {
+      url.searchParams.append('prompt_lab_id', promptLabId);
+    }
+    if (filterByParams !== undefined) {
+      url.searchParams.append('filter_by_params', filterByParams.toString());
+    }
+    
+    const response = await fetch(url.toString());
     if (!response.ok) {
       throw new Error('Failed to fetch evaluation datasets');
     }
@@ -119,19 +127,39 @@ export const evaluationService = {
   },
 
   // Case generation
-  async generateCases(datasetId: number, template: string, count: number = 5): Promise<CasePreview[]> {
+  async generateCases(datasetId: number, template: string, count: number = 5, usePromptLabPrompt: boolean = false, generateOutputVariations: boolean = false, variationsCount: number = 3, persistImmediately: boolean = false): Promise<{ previews: CasePreview[], persisted_count?: number, generation_method: string, prompt_lab_name?: string, prompt_content?: string, prompt_parameters?: string[], supports_variations?: boolean }> {
+    const requestBody: any = { 
+      template, 
+      count, 
+      use_prompt_lab_prompt: usePromptLabPrompt,
+      persist_immediately: persistImmediately
+    };
+    
+    if (generateOutputVariations) {
+      requestBody.generate_output_variations = true;
+      requestBody.variations_count = variationsCount;
+    }
+    
     const response = await fetch(`${EVALUATION_API_URL}/datasets/${datasetId}/generate-cases/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ template, count }),
+      body: JSON.stringify(requestBody),
     });
     if (!response.ok) {
       throw new Error('Failed to generate cases');
     }
     const data = await response.json();
-    return data.previews || [];
+    return {
+      previews: data.previews || data.generated_cases || [],
+      persisted_count: data.persisted_count || 0,
+      generation_method: data.generation_method || 'template',
+      prompt_lab_name: data.prompt_lab_name,
+      prompt_content: data.prompt_content,
+      prompt_parameters: data.prompt_parameters || [],
+      supports_variations: data.supports_variations || false
+    };
   },
 
   async addSelectedCases(datasetId: number, previewIds: string[]): Promise<{ added_count: number }> {
@@ -144,6 +172,27 @@ export const evaluationService = {
     });
     if (!response.ok) {
       throw new Error('Failed to add selected cases');
+    }
+    return response.json();
+  },
+
+  async addSelectedCasesWithVariations(datasetId: number, casesData: Array<{
+    preview_id: string;
+    input_text: string;
+    parameters: Record<string, any>;
+    selected_output_index?: number | null;
+    custom_output?: string | null;
+    output_variations?: Array<{ index: number; text: string; style: string }>;
+  }>): Promise<{ added_count: number; added_cases?: any[] }> {
+    const response = await fetch(`${EVALUATION_API_URL}/datasets/${datasetId}/add-selected-cases/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ cases: casesData }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to add selected cases with variations');
     }
     return response.json();
   },
@@ -217,13 +266,13 @@ export const evaluationService = {
   },
 
   // Compatibility checking
-  async checkCompatibility(datasetId: number, sessionId: string): Promise<DatasetCompatibility> {
+  async checkCompatibility(datasetId: number, promptLabId: string): Promise<DatasetCompatibility> {
     const response = await fetch(`${EVALUATION_API_URL}/datasets/${datasetId}/compatibility/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ session_id: sessionId }),
+      body: JSON.stringify({ prompt_lab_id: promptLabId }),
     });
     if (!response.ok) {
       throw new Error('Failed to check compatibility');
@@ -231,13 +280,13 @@ export const evaluationService = {
     return response.json();
   },
 
-  async migrateDataset(datasetId: number, sessionId: string): Promise<{ migrated: boolean; new_dataset_id?: number }> {
+  async migrateDataset(datasetId: number, promptLabId: string): Promise<{ migrated: boolean; new_dataset_id?: number }> {
     const response = await fetch(`${EVALUATION_API_URL}/datasets/${datasetId}/migrate/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ session_id: sessionId }),
+      body: JSON.stringify({ prompt_lab_id: promptLabId }),
     });
     if (!response.ok) {
       throw new Error('Failed to migrate dataset');
@@ -247,12 +296,12 @@ export const evaluationService = {
 
   // Evaluation runs
   async runEvaluation(datasetId: number, promptId: number): Promise<EvaluationRun> {
-    const response = await fetch(`${EVALUATION_API_URL}/datasets/${datasetId}/run/`, {
+    const response = await fetch(`${EVALUATION_API_URL}/run/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ prompt_id: promptId }),
+      body: JSON.stringify({ dataset_id: datasetId, prompt_id: promptId }),
     });
     if (!response.ok) {
       throw new Error('Failed to start evaluation run');
@@ -270,7 +319,7 @@ export const evaluationService = {
   },
 
   async getEvaluationResults(runId: number): Promise<EvaluationResult[]> {
-    const response = await fetch(`${EVALUATION_API_URL}/runs/${runId}/results/`);
+    const response = await fetch(`${API_BASE_URL}/evaluations/runs/${runId}/results/`);
     if (!response.ok) {
       throw new Error('Failed to fetch evaluation results');
     }

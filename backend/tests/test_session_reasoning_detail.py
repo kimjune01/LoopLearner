@@ -1,35 +1,35 @@
 """
-TDD Tests for Session Detail with Reasoning Factor Support
+TDD Tests for PromptLab Detail with Reasoning Factor Support
 Following TDD principles: Write failing tests first that define expected behavior
 """
 import json
 from django.test import TestCase, Client
 from django.urls import reverse
-from core.models import Session, SystemPrompt, Email, Draft, DraftReason, UserFeedback, ReasonRating
+from core.models import PromptLab, SystemPrompt, Email, Draft, DraftReason, UserFeedback, ReasonRating
 
 
 class TestSessionDetailWithReasoningFactors(TestCase):
-    """Test session detail includes reasoning factor information - TDD approach"""
+    """Test  detail includes reasoning factor information - TDD approach"""
     
     def setUp(self):
         """Set up test data"""
         self.client = Client()
         
-        # Create test session
-        self.session = Session.objects.create(
-            name="Test Session with Reasoning",
+        # Create test 
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab with Reasoning",
             description="Test session for reasoning detail API"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
         )
         
         self.email = Email.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             subject="Test Email",
             body="Test email body",
             sender="test@example.com"
@@ -82,12 +82,12 @@ class TestSessionDetailWithReasoningFactors(TestCase):
             liked=False
         )
     
-    def test_session_detail_includes_reasoning_summary(self):
-        """Test that session detail includes reasoning factor summary"""
+    def test_prompt_lab_detail_includes_reasoning_summary(self):
+        """Test that  detail includes reasoning factor summary"""
         # This test will FAIL initially - endpoint doesn't include reasoning data yet
         
         response = self.client.get(
-            reverse('session-detail', kwargs={'session_id': self.session.id})
+            reverse('session-detail', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         self.assertEqual(response.status_code, 200)
@@ -104,10 +104,10 @@ class TestSessionDetailWithReasoningFactors(TestCase):
         self.assertIn('most_liked_reasons', reasoning_summary)
         self.assertIn('least_liked_reasons', reasoning_summary)
     
-    def test_session_detail_reasoning_summary_calculations(self):
+    def test_prompt_lab_detail_reasoning_summary_calculations(self):
         """Test that reasoning summary calculations are correct"""
         response = self.client.get(
-            reverse('session-detail', kwargs={'session_id': self.session.id})
+            reverse('-detail', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         self.assertEqual(response.status_code, 200)
@@ -127,10 +127,10 @@ class TestSessionDetailWithReasoningFactors(TestCase):
         self.assertEqual(breakdown['disliked'], 1)
         self.assertEqual(breakdown['total'], 3)
     
-    def test_session_detail_most_liked_reasons(self):
+    def test_prompt_lab_detail_most_liked_reasons(self):
         """Test that most liked reasons are correctly identified"""
         response = self.client.get(
-            reverse('session-detail', kwargs={'session_id': self.session.id})
+            reverse('session-detail', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         response_data = response.json()
@@ -153,10 +153,10 @@ class TestSessionDetailWithReasoningFactors(TestCase):
         self.assertIn("Professional tone maintained", liked_texts)
         self.assertIn("Clear and concise structure", liked_texts)
     
-    def test_session_detail_least_liked_reasons(self):
+    def test_prompt_lab_detail_least_liked_reasons(self):
         """Test that least liked reasons are correctly identified"""
         response = self.client.get(
-            reverse('session-detail', kwargs={'session_id': self.session.id})
+            reverse('session-detail', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         response_data = response.json()
@@ -172,23 +172,23 @@ class TestSessionDetailWithReasoningFactors(TestCase):
         self.assertEqual(disliked_reason['dislike_count'], 1)
         self.assertEqual(disliked_reason['like_count'], 0)
     
-    def test_session_detail_empty_reasoning_data(self):
-        """Test session detail with no reasoning data"""
-        # Create a session with no drafts/reasoning
-        empty_session = Session.objects.create(
-            name="Empty Session",
+    def test_prompt_lab_detail_empty_reasoning_data(self):
+        """Test  detail with no reasoning data"""
+        # Create a  with no drafts/reasoning
+        empty_session = PromptLab.objects.create(
+            name="Empty PromptLab",
             description="Session with no reasoning data"
         )
         
         SystemPrompt.objects.create(
-            session=empty_session,
+            prompt_lab=empty_session,
             content="Empty prompt",
             version=1,
             is_active=True
         )
         
         response = self.client.get(
-            reverse('session-detail', kwargs={'session_id': empty_session.id})
+            reverse('session-detail', kwargs={'prompt_lab_id': empty_session.id})
         )
         
         self.assertEqual(response.status_code, 200)
@@ -201,11 +201,11 @@ class TestSessionDetailWithReasoningFactors(TestCase):
         self.assertEqual(reasoning_summary['most_liked_reasons'], [])
         self.assertEqual(reasoning_summary['least_liked_reasons'], [])
     
-    def test_session_detail_with_multiple_drafts_and_reasons(self):
+    def test_prompt_lab_detail_with_multiple_drafts_and_reasons(self):
         """Test reasoning summary across multiple drafts and emails"""
         # Create another email and draft with different reasons
         email2 = Email.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             subject="Second Test Email",
             body="Second email body",
             sender="test2@example.com"
@@ -248,13 +248,13 @@ class TestSessionDetailWithReasoningFactors(TestCase):
         )
         
         response = self.client.get(
-            reverse('session-detail', kwargs={'session_id': self.session.id})
+            reverse('session-detail', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         response_data = response.json()
         reasoning_summary = response_data['reasoning_summary']
         
-        # Should aggregate across all drafts in session
+        # Should aggregate across all drafts in 
         self.assertEqual(reasoning_summary['total_reasons_generated'], 5)  # 3 + 2
         self.assertEqual(reasoning_summary['total_reason_ratings'], 5)  # 3 + 2
         
@@ -271,20 +271,20 @@ class TestDraftReasoningDetailEndpoint(TestCase):
         """Set up test data"""
         self.client = Client()
         
-        self.session = Session.objects.create(
+        self.prompt_lab = PromptLab.objects.create(
             name="Draft Reasoning Test",
             description="Test draft reasoning endpoint"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
         )
         
         self.email = Email.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             subject="Test Email",
             body="Test email body",
             sender="test@example.com"
@@ -314,7 +314,7 @@ class TestDraftReasoningDetailEndpoint(TestCase):
         
         response = self.client.get(
             reverse('draft-reasoning-factors', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'draft_id': self.draft.id
             })
         )
@@ -325,7 +325,7 @@ class TestDraftReasoningDetailEndpoint(TestCase):
         """Test that endpoint returns reasoning factors for draft"""
         response = self.client.get(
             reverse('draft-reasoning-factors', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'draft_id': self.draft.id
             })
         )
@@ -362,7 +362,7 @@ class TestDraftReasoningDetailEndpoint(TestCase):
         
         response = self.client.get(
             reverse('draft-reasoning-factors', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'draft_id': self.draft.id
             })
         )
@@ -382,7 +382,7 @@ class TestDraftReasoningDetailEndpoint(TestCase):
         """Test error handling for nonexistent draft"""
         response = self.client.get(
             reverse('draft-reasoning-factors', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'draft_id': 99999
             })
         )
@@ -390,17 +390,17 @@ class TestDraftReasoningDetailEndpoint(TestCase):
         self.assertEqual(response.status_code, 404)
     
     def test_draft_reasoning_wrong_session(self):
-        """Test error handling when draft doesn't belong to session"""
-        # Create draft in different session
-        other_session = Session.objects.create(name="Other Session")
+        """Test error handling when draft doesn't belong to """
+        # Create draft in different 
+        other_session = PromptLab.objects.create(name="Other PromptLab")
         other_email = Email.objects.create(
-            session=other_session,
+            prompt_lab=other_session,
             subject="Other Email",
             body="Other body",
             sender="other@example.com"
         )
         other_prompt = SystemPrompt.objects.create(
-            session=other_session,
+            prompt_lab=other_session,
             content="Other prompt",
             version=1
         )
@@ -412,7 +412,7 @@ class TestDraftReasoningDetailEndpoint(TestCase):
         
         response = self.client.get(
             reverse('draft-reasoning-factors', kwargs={
-                'session_id': self.session.id,
+                'prompt_lab_id': self.prompt_lab.id,
                 'draft_id': other_draft.id
             })
         )

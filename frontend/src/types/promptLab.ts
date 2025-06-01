@@ -1,4 +1,16 @@
-export interface Session {
+export interface SystemPrompt {
+  id: number;
+  prompt_lab: string;
+  content: string;
+  version: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  parameters: string[];
+  performance_score: number | null;
+}
+
+export interface PromptLab {
   id: string;
   name: string;
   description: string;
@@ -20,16 +32,17 @@ export interface Session {
     created_at: string;
     scenario_type: string;
   }>;
+  prompts?: SystemPrompt[];
 }
 
-export interface SessionListResponse {
-  sessions: Session[];
+export interface PromptLabListResponse {
+  prompt_labs: PromptLab[];
   count: number;
 }
 
-export interface SessionStats {
-  session_id: string;
-  session_name: string;
+export interface PromptLabStats {
+  prompt_lab_id: string;
+  prompt_lab_name: string;
   created_at: string;
   updated_at: string;
   optimization_iterations: number;
@@ -60,18 +73,18 @@ export interface SessionStats {
   preferences_count: number;
 }
 
-export interface CreateSessionRequest {
+export interface CreatePromptLabRequest {
   name: string;
   description?: string;
   initial_prompt?: string;
 }
 
-export interface UpdateSessionRequest {
+export interface UpdatePromptLabRequest {
   name?: string;
   description?: string;
 }
 
-export interface DuplicateSessionRequest {
+export interface DuplicatePromptLabRequest {
   name: string;
   description?: string;
   copy_emails?: boolean;

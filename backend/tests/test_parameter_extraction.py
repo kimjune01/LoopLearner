@@ -1,7 +1,7 @@
 import pytest
 import json
 from django.test import TestCase, Client
-from core.models import Session, SystemPrompt
+from core.models import PromptLab, SystemPrompt
 
 
 class ParameterExtractionTestCase(TestCase):
@@ -11,9 +11,9 @@ class ParameterExtractionTestCase(TestCase):
         """Set up test data"""
         self.client = Client()
         
-        # Create test session
-        self.session = Session.objects.create(
-            name="Parameter Test Session",
+        # Create test 
+        self.prompt_lab = PromptLab.objects.create(
+            name="Parameter Test PromptLab",
             description="Testing parameter extraction"
         )
     
@@ -22,7 +22,7 @@ class ParameterExtractionTestCase(TestCase):
         prompt_content = "Hello {{user_name}}, you are working on {{project}} with {{priority}} priority."
         
         system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content=prompt_content,
             version=1,
             is_active=True
@@ -37,7 +37,7 @@ class ParameterExtractionTestCase(TestCase):
         prompt_content = "Hello {{name}}, your role is {{role}}. Remember {{name}}, your {{role}} is important."
         
         system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content=prompt_content,
             version=1,
             is_active=True
@@ -53,7 +53,7 @@ class ParameterExtractionTestCase(TestCase):
         prompt_content = "You are {{ assistant name }} for {{ company name }} handling {{ task type }}."
         
         system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content=prompt_content,
             version=1,
             is_active=True
@@ -75,7 +75,7 @@ Current user: {{current_user}}
 Department: {{user_department}}"""
         
         system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content=prompt_content,
             version=1,
             is_active=True
@@ -93,7 +93,7 @@ Department: {{user_department}}"""
         prompt_content = "This is a regular prompt with no parameters."
         
         system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content=prompt_content,
             version=1,
             is_active=True
@@ -104,7 +104,7 @@ Department: {{user_department}}"""
     def test_empty_content(self):
         """Test prompt with empty content"""
         system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="",
             version=1,
             is_active=True
@@ -116,7 +116,7 @@ Department: {{user_department}}"""
         """Test that parameters are updated when content changes"""
         # Create initial prompt
         system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Hello {{user}}",
             version=1,
             is_active=True
@@ -132,20 +132,20 @@ Department: {{user_department}}"""
         expected_parameters = ['name', 'app']
         self.assertEqual(set(system_prompt.parameters), set(expected_parameters))
     
-    def test_session_detail_api_includes_parameters(self):
-        """Test that session detail API includes parameters in response"""
+    def test_prompt_lab_detail_api_includes_parameters(self):
+        """Test that  detail API includes parameters in response"""
         # Create prompt with parameters
         prompt_content = "Hello {{user_name}}, your task is {{task_type}}."
         
         SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content=prompt_content,
             version=1,
             is_active=True
         )
         
-        # Call session detail API
-        response = self.client.get(f'/api/sessions/{self.session.id}/')
+        # Call  detail API
+        response = self.client.get(f'/api/prompt-labs/{self.prompt_lab.id}/')
         
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -162,7 +162,7 @@ Department: {{user_department}}"""
         """Test that updating a prompt via API correctly extracts new parameters"""
         # Create initial prompt
         SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Initial prompt with {{old_param}}",
             version=1,
             is_active=True
@@ -171,7 +171,7 @@ Department: {{user_department}}"""
         # Update prompt via API
         new_prompt_content = "Updated prompt with {{new_param}} and {{another_param}}"
         response = self.client.put(
-            f'/api/sessions/{self.session.id}/',
+            f'/api/prompt-labs/{self.prompt_lab.id}/',
             data=json.dumps({'initial_prompt': new_prompt_content}),
             content_type='application/json'
         )
@@ -180,7 +180,7 @@ Department: {{user_department}}"""
         
         # Verify parameters were extracted
         updated_prompt = SystemPrompt.objects.get(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             is_active=True
         )
         
@@ -192,7 +192,7 @@ Department: {{user_department}}"""
         prompt_content = "This has {single} braces and {{incomplete} and }}incomplete{{ patterns."
         
         system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content=prompt_content,
             version=1,
             is_active=True
@@ -206,7 +206,7 @@ Department: {{user_department}}"""
         prompt_content = "Valid: {{param1}} and {{param2}}. Invalid: {{{nested}}} and {{{{quad}}}}"
         
         system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content=prompt_content,
             version=1,
             is_active=True

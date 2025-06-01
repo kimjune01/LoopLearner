@@ -10,7 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.shortcuts import get_object_or_404
 from django.db import models
-from core.models import Session, EvaluationDataset, EvaluationCase, SystemPrompt
+from core.models import PromptLab, EvaluationDataset, EvaluationCase, SystemPrompt
 from app.services.evaluation_case_generator import EvaluationCaseGenerator
 from app.services.evaluation_dataset_migrator import EvaluationDatasetMigrator
 
@@ -29,15 +29,15 @@ class EvaluationDatasetListView(View):
         filter_by_params = request.GET.get('filter_by_params', 'false').lower() == 'true'
         
         if session_id:
-            # Get session-specific datasets
-            session = get_object_or_404(Session, id=session_id)
+            # Get prompt lab-specific datasets
+            prompt_lab = get_object_or_404(PromptLab, id=session_id)
             
             if filter_by_params:
-                # Get active system prompt parameters for this session
-                active_prompt = session.prompts.filter(is_active=True).first()
+                # Get active system prompt parameters for this prompt lab
+                active_prompt = prompt_lab.prompts.filter(is_active=True).first()
                 if active_prompt and active_prompt.parameters:
                     # Find datasets that have matching parameters
-                    datasets = EvaluationDataset.objects.filter(session=session)
+                    datasets = EvaluationDataset.objects.filter(prompt_lab=prompt_lab)
                     # Filter by parameter overlap in Python since JSONField queries can be complex
                     compatible_datasets = []
                     for dataset in datasets:
@@ -100,12 +100,12 @@ class EvaluationDatasetListView(View):
             return JsonResponse({'error': 'name is required'}, status=400)
         
         if not session_id:
-            return JsonResponse({'error': 'session_id is required - all datasets must be associated with a session'}, status=400)
+            return JsonResponse({'error': 'session_id is required - all datasets must be associated with a prompt lab'}, status=400)
         
-        session = get_object_or_404(Session, id=session_id)
+        prompt_lab = get_object_or_404(PromptLab, id=session_id)
         
         dataset = EvaluationDataset.objects.create(
-            session=session,
+            prompt_lab=prompt_lab,
             name=name,
             description=description,
             parameters=parameters,

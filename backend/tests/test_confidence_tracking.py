@@ -7,7 +7,7 @@ Based on Requirements FR-027: Track user and system confidence until threshold m
 import json
 from django.test import TestCase, Client
 from django.urls import reverse
-from core.models import Session, SystemPrompt, Email, Draft, DraftReason, UserFeedback, ReasonRating
+from core.models import PromptLab, SystemPrompt, Email, Draft, DraftReason, UserFeedback, ReasonRating
 from decimal import Decimal
 
 
@@ -16,41 +16,41 @@ class TestConfidenceTrackingModels(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Confidence Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Confidence Test PromptLab",
             description="Session for testing confidence tracking"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
         )
     
-    def test_session_confidence_tracker_model_exists(self):
-        """Test that SessionConfidence model exists for tracking confidence metrics"""
+    def test_prompt_lab_confidence_tracker_model_exists(self):
+        """Test that PromptLabConfidence model exists for tracking confidence metrics"""
         # This will FAIL initially - model doesn't exist yet
-        from core.models import SessionConfidence
+        from core.models import PromptLabConfidence
         
-        confidence = SessionConfidence(
-            session=self.session,
+        confidence = PromptLabConfidence(
+            prompt_lab=self.prompt_lab,
             user_confidence=0.75,
             system_confidence=0.60,
             confidence_trend=0.05
         )
         confidence.save()
         
-        self.assertEqual(confidence.session, self.session)
+        self.assertEqual(confidence.prompt_lab, self.prompt_lab)
         self.assertEqual(confidence.user_confidence, 0.75)
         self.assertEqual(confidence.system_confidence, 0.60)
     
-    def test_session_confidence_has_required_fields(self):
-        """Test that SessionConfidence has all required fields"""
-        from core.models import SessionConfidence
+    def test_prompt_lab_confidence_has_required_fields(self):
+        """Test that PromptLabConfidence has all required fields"""
+        from core.models import PromptLabConfidence
         
-        confidence = SessionConfidence(
-            session=self.session,
+        confidence = PromptLabConfidence(
+            prompt_lab=self.prompt_lab,
             user_confidence=0.80,
             system_confidence=0.70,
             confidence_trend=0.10,
@@ -71,14 +71,14 @@ class TestConfidenceTrackingModels(TestCase):
         self.assertTrue(hasattr(confidence, 'consistent_feedback_streak'))
         self.assertTrue(hasattr(confidence, 'last_calculated'))
     
-    def test_session_confidence_validation(self):
+    def test_prompt_lab_confidence_validation(self):
         """Test that confidence values are properly validated"""
-        from core.models import SessionConfidence
+        from core.models import PromptLabConfidence
         from django.core.exceptions import ValidationError
         
         # Test valid confidence values
-        valid_confidence = SessionConfidence(
-            session=self.session,
+        valid_confidence = PromptLabConfidence(
+            prompt_lab=self.prompt_lab,
             user_confidence=0.5,
             system_confidence=1.0
         )
@@ -86,8 +86,8 @@ class TestConfidenceTrackingModels(TestCase):
         
         # Test invalid confidence > 1
         with self.assertRaises(ValidationError):
-            invalid_confidence = SessionConfidence(
-                session=self.session,
+            invalid_confidence = PromptLabConfidence(
+                prompt_lab=self.prompt_lab,
                 user_confidence=1.5,
                 system_confidence=0.5
             )
@@ -95,8 +95,8 @@ class TestConfidenceTrackingModels(TestCase):
         
         # Test invalid confidence < 0
         with self.assertRaises(ValidationError):
-            invalid_confidence = SessionConfidence(
-                session=self.session,
+            invalid_confidence = PromptLabConfidence(
+                prompt_lab=self.prompt_lab,
                 user_confidence=0.5,
                 system_confidence=-0.1
             )
@@ -104,17 +104,17 @@ class TestConfidenceTrackingModels(TestCase):
     
     def test_confidence_threshold_constants(self):
         """Test that confidence threshold constants are defined"""
-        from core.models import SessionConfidence
+        from core.models import PromptLabConfidence
         
         # These should be class constants for determining when learning is sufficient
-        self.assertTrue(hasattr(SessionConfidence, 'USER_CONFIDENCE_THRESHOLD'))
-        self.assertTrue(hasattr(SessionConfidence, 'SYSTEM_CONFIDENCE_THRESHOLD'))
-        self.assertTrue(hasattr(SessionConfidence, 'COMBINED_CONFIDENCE_THRESHOLD'))
+        self.assertTrue(hasattr(PromptLabConfidence, 'USER_CONFIDENCE_THRESHOLD'))
+        self.assertTrue(hasattr(PromptLabConfidence, 'SYSTEM_CONFIDENCE_THRESHOLD'))
+        self.assertTrue(hasattr(PromptLabConfidence, 'COMBINED_CONFIDENCE_THRESHOLD'))
         
         # Should be reasonable threshold values
-        self.assertGreaterEqual(SessionConfidence.USER_CONFIDENCE_THRESHOLD, 0.7)
-        self.assertGreaterEqual(SessionConfidence.SYSTEM_CONFIDENCE_THRESHOLD, 0.7)
-        self.assertGreaterEqual(SessionConfidence.COMBINED_CONFIDENCE_THRESHOLD, 0.75)
+        self.assertGreaterEqual(PromptLabConfidence.USER_CONFIDENCE_THRESHOLD, 0.7)
+        self.assertGreaterEqual(PromptLabConfidence.SYSTEM_CONFIDENCE_THRESHOLD, 0.7)
+        self.assertGreaterEqual(PromptLabConfidence.COMBINED_CONFIDENCE_THRESHOLD, 0.75)
 
 
 class TestConfidenceCalculationService(TestCase):
@@ -122,13 +122,13 @@ class TestConfidenceCalculationService(TestCase):
     
     def setUp(self):
         """Set up test data with feedback patterns"""
-        self.session = Session.objects.create(
+        self.prompt_lab = PromptLab.objects.create(
             name="Confidence Calculation Test",
             description="Session for testing confidence calculations"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
@@ -136,14 +136,14 @@ class TestConfidenceCalculationService(TestCase):
         
         # Create test emails and drafts
         self.email1 = Email.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             subject="Test Email 1",
             body="Test body 1",
             sender="test1@example.com"
         )
         
         self.email2 = Email.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             subject="Test Email 2", 
             body="Test body 2",
             sender="test2@example.com"
@@ -179,7 +179,7 @@ class TestConfidenceCalculationService(TestCase):
         self.assertTrue(hasattr(calculator, 'calculate_user_confidence'))
         
         # Test the interface
-        user_confidence = calculator.calculate_user_confidence(self.session)
+        user_confidence = calculator.calculate_user_confidence(self.prompt_lab)
         
         # Should return float between 0 and 1
         self.assertIsInstance(user_confidence, float)
@@ -196,7 +196,7 @@ class TestConfidenceCalculationService(TestCase):
         self.assertTrue(hasattr(calculator, 'calculate_system_confidence'))
         
         # Test the interface
-        system_confidence = calculator.calculate_system_confidence(self.session)
+        system_confidence = calculator.calculate_system_confidence(self.prompt_lab)
         
         # Should return float between 0 and 1
         self.assertIsInstance(system_confidence, float)
@@ -216,17 +216,17 @@ class TestConfidenceCalculationService(TestCase):
             )
         
         calculator = ConfidenceCalculator()
-        confidence_consistent = calculator.calculate_user_confidence(self.session)
+        confidence_consistent = calculator.calculate_user_confidence(self.prompt_lab)
         
         # Create inconsistent feedback pattern
-        inconsistent_session = Session.objects.create(name="Inconsistent Session")
+        inconsistent_session = PromptLab.objects.create(name="Inconsistent PromptLab")
         inconsistent_prompt = SystemPrompt.objects.create(
-            session=inconsistent_session,
+            prompt_lab=inconsistent_session,
             content="Test prompt",
             version=1
         )
         inconsistent_email = Email.objects.create(
-            session=inconsistent_session,
+            prompt_lab=inconsistent_session,
             subject="Test",
             body="Test",
             sender="test@example.com"
@@ -273,7 +273,7 @@ class TestConfidenceCalculationService(TestCase):
         calculator = ConfidenceCalculator()
         
         # Should calculate high system confidence due to alignment
-        system_confidence = calculator.calculate_system_confidence(self.session)
+        system_confidence = calculator.calculate_system_confidence(self.prompt_lab)
         
         # Should be > 0.5 since reasoning aligns with user preferences
         self.assertGreater(system_confidence, 0.5)
@@ -290,9 +290,9 @@ class TestConfidenceCalculationService(TestCase):
         self.assertTrue(hasattr(calculator, 'should_continue_learning'))
         
         # Test threshold checking
-        user_sufficient = calculator.is_user_confidence_sufficient(self.session)
-        system_sufficient = calculator.is_system_confidence_sufficient(self.session)
-        should_continue = calculator.should_continue_learning(self.session)
+        user_sufficient = calculator.is_user_confidence_sufficient(self.prompt_lab)
+        system_sufficient = calculator.is_system_confidence_sufficient(self.prompt_lab)
+        should_continue = calculator.should_continue_learning(self.prompt_lab)
         
         # Should return boolean values
         self.assertIsInstance(user_sufficient, bool)
@@ -311,32 +311,32 @@ class TestConfidenceTrackingAPI(TestCase):
         """Set up test data"""
         self.client = Client()
         
-        self.session = Session.objects.create(
+        self.prompt_lab = PromptLab.objects.create(
             name="API Confidence Test",
             description="Session for testing confidence API"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
         )
     
-    def test_session_confidence_endpoint_exists(self):
-        """Test that session confidence endpoint exists"""
+    def test_prompt_lab_confidence_endpoint_exists(self):
+        """Test that  confidence endpoint exists"""
         # This will FAIL initially - endpoint doesn't exist yet
         
         response = self.client.get(
-            reverse('session-confidence', kwargs={'session_id': self.session.id})
+            reverse('prompt-lab-confidence', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         self.assertEqual(response.status_code, 200)
     
-    def test_session_confidence_returns_metrics(self):
+    def test_prompt_lab_confidence_returns_metrics(self):
         """Test that confidence endpoint returns confidence metrics"""
         response = self.client.get(
-            reverse('session-confidence', kwargs={'session_id': self.session.id})
+            reverse('-confidence', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         self.assertEqual(response.status_code, 200)
@@ -359,7 +359,7 @@ class TestConfidenceTrackingAPI(TestCase):
     def test_confidence_calculation_trigger_endpoint(self):
         """Test endpoint to manually trigger confidence recalculation"""
         response = self.client.post(
-            reverse('recalculate-confidence', kwargs={'session_id': self.session.id}),
+            reverse('recalculate-confidence', kwargs={'prompt_lab_id': self.prompt_lab.id}),
             data=json.dumps({}),
             content_type='application/json'
         )
@@ -374,14 +374,14 @@ class TestConfidenceTrackingAPI(TestCase):
     def test_confidence_history_endpoint(self):
         """Test endpoint to get confidence tracking history"""
         response = self.client.get(
-            reverse('confidence-history', kwargs={'session_id': self.session.id})
+            reverse('confidence-history', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         self.assertEqual(response.status_code, 200)
         response_data = response.json()
         
         self.assertIn('confidence_history', response_data)
-        self.assertIn('session_id', response_data)
+        self.assertIn('prompt_lab_id', response_data)
         
         # History should be an array
         self.assertIsInstance(response_data['confidence_history'], list)
@@ -390,7 +390,7 @@ class TestConfidenceTrackingAPI(TestCase):
         """Test endpoint to get/update confidence thresholds"""
         # GET current thresholds
         response = self.client.get(
-            reverse('confidence-thresholds', kwargs={'session_id': self.session.id})
+            reverse('confidence-thresholds', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         self.assertEqual(response.status_code, 200)
@@ -407,7 +407,7 @@ class TestConfidenceTrackingAPI(TestCase):
         }
         
         response = self.client.post(
-            reverse('confidence-thresholds', kwargs={'session_id': self.session.id}),
+            reverse('confidence-thresholds', kwargs={'prompt_lab_id': self.prompt_lab.id}),
             data=json.dumps(new_thresholds),
             content_type='application/json'
         )
@@ -416,9 +416,9 @@ class TestConfidenceTrackingAPI(TestCase):
     
     def test_confidence_api_validation_errors(self):
         """Test confidence API error handling"""
-        # Test invalid session ID
+        # Test invalid prompt lab ID
         response = self.client.get(
-            reverse('session-confidence', kwargs={'session_id': '00000000-0000-0000-0000-000000000000'})
+            reverse('-confidence', kwargs={'prompt_lab_id': '00000000-0000-0000-0000-000000000000'})
         )
         
         self.assertEqual(response.status_code, 404)
@@ -430,7 +430,7 @@ class TestConfidenceTrackingAPI(TestCase):
         }
         
         response = self.client.post(
-            reverse('confidence-thresholds', kwargs={'session_id': self.session.id}),
+            reverse('confidence-thresholds', kwargs={'prompt_lab_id': self.prompt_lab.id}),
             data=json.dumps(invalid_thresholds),
             content_type='application/json'
         )
@@ -443,13 +443,13 @@ class TestConfidenceIntegrationWithOptimization(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Integration Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Integration Test PromptLab",
             description="Session for testing confidence integration"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
@@ -462,14 +462,14 @@ class TestConfidenceIntegrationWithOptimization(TestCase):
         calculator = ConfidenceCalculator()
         
         # Should not trigger optimization if confidence is insufficient
-        should_continue = calculator.should_continue_learning(self.session)
+        should_continue = calculator.should_continue_learning(self.prompt_lab)
         
         if should_continue:
             # Low confidence - optimization should be allowed/encouraged
-            self.assertTrue(True)  # This is expected for new sessions
+            self.assertTrue(True)  # This is expected for new prompt labs
         else:
             # High confidence - optimization might be skipped
-            # This would happen in mature sessions with sufficient learning
+            # This would happen in mature  with sufficient learning
             self.assertTrue(True)  # Both cases are valid
     
     def test_confidence_influences_cold_start_completion(self):
@@ -481,22 +481,22 @@ class TestConfidenceIntegrationWithOptimization(TestCase):
         # Should have method to check cold start status
         self.assertTrue(hasattr(calculator, 'is_cold_start_complete'))
         
-        cold_start_complete = calculator.is_cold_start_complete(self.session)
+        cold_start_complete = calculator.is_cold_start_complete(self.prompt_lab)
         self.assertIsInstance(cold_start_complete, bool)
     
     def test_confidence_tracking_updates_session_stats(self):
-        """Test that confidence calculations update session statistics"""
-        # This would integrate with existing session stats
-        # Session should track confidence progression over time
+        """Test that confidence calculations update  statistics"""
+        # This would integrate with existing  stats
+        # PromptLab should track confidence progression over time
         
-        # Should be able to see confidence trend in session detail
+        # Should be able to see confidence trend in  detail
         from django.urls import reverse
         client = Client()
         
         response = client.get(
-            reverse('session-detail', kwargs={'session_id': self.session.id})
+            reverse('prompt-lab-detail', kwargs={'prompt_lab_id': self.prompt_lab.id})
         )
         
         self.assertEqual(response.status_code, 200)
-        # Session detail should include confidence information
-        # (This will be implemented when we integrate with session detail)
+        #  detail should include confidence information
+        # (This will be implemented when we integrate with  detail)

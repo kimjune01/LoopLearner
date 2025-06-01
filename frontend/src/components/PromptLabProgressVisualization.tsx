@@ -1,15 +1,15 @@
 /**
- * Session Progress Visualization Component
- * Displays comprehensive learning progress, optimization history, and convergence trends for a session
+ * Prompt Lab Progress Visualization Component
+ * Displays comprehensive learning progress, optimization history, and convergence trends for a prompt lab
  */
 
 import React, { useState, useEffect } from 'react';
-import { sessionService } from '../services/sessionService';
-import type { Session } from '../types/session';
+import { promptLabService } from '../services/promptLabService';
+import type { PromptLab } from '../types/promptLab';
 
 // Types for visualization data
 interface ProgressData {
-  session: Session;
+  promptLab: PromptLab;
   optimizationHistory: OptimizationEvent[];
   confidenceHistory: ConfidencePoint[];
   performanceMetrics: PerformancePoint[];
@@ -74,13 +74,13 @@ interface FeedbackSummary {
   acceptanceRate: number;
 }
 
-interface SessionProgressVisualizationProps {
-  sessionId: string;
+interface PromptLabProgressVisualizationProps {
+  promptLabId: string;
   onOptimizationTrigger?: () => void;
 }
 
-const SessionProgressVisualization: React.FC<SessionProgressVisualizationProps> = ({
-  sessionId,
+const PromptLabProgressVisualization: React.FC<PromptLabProgressVisualizationProps> = ({
+  promptLabId,
   onOptimizationTrigger
 }) => {
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
@@ -90,33 +90,33 @@ const SessionProgressVisualization: React.FC<SessionProgressVisualizationProps> 
 
   useEffect(() => {
     loadProgressData();
-  }, [sessionId, selectedTimeRange]);
+  }, [promptLabId, selectedTimeRange]);
 
   const loadProgressData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Load session details
-      const session = await sessionService.getSession(sessionId);
+      // Load prompt lab details
+      const promptLab = await promptLabService.getPromptLab(promptLabId);
       
       // Load optimization history (mock for now - would be real API calls)
-      const optimizationHistory = await loadOptimizationHistory(sessionId, selectedTimeRange);
+      const optimizationHistory = await loadOptimizationHistory(promptLabId, selectedTimeRange);
       
       // Load confidence evolution
-      const confidenceHistory = await loadConfidenceHistory(sessionId, selectedTimeRange);
+      const confidenceHistory = await loadConfidenceHistory(promptLabId, selectedTimeRange);
       
       // Load performance metrics
-      const performanceMetrics = await loadPerformanceMetrics(sessionId, selectedTimeRange);
+      const performanceMetrics = await loadPerformanceMetrics(promptLabId, selectedTimeRange);
       
       // Load convergence assessment
-      const convergenceAssessment = await loadConvergenceAssessment(sessionId);
+      const convergenceAssessment = await loadConvergenceAssessment(promptLabId);
       
       // Load feedback summary
-      const feedbackSummary = await loadFeedbackSummary(sessionId, selectedTimeRange);
+      const feedbackSummary = await loadFeedbackSummary(promptLabId, selectedTimeRange);
 
       setProgressData({
-        session,
+        promptLab,
         optimizationHistory,
         confidenceHistory,
         performanceMetrics,
@@ -131,7 +131,7 @@ const SessionProgressVisualization: React.FC<SessionProgressVisualizationProps> 
   };
 
   // Mock data loading functions - these would call real APIs
-  const loadOptimizationHistory = async (sessionId: string, timeRange: string): Promise<OptimizationEvent[]> => {
+  const loadOptimizationHistory = async (promptLabId: string, timeRange: string): Promise<OptimizationEvent[]> => {
     // Mock data for demonstration
     return [
       {
@@ -167,7 +167,7 @@ const SessionProgressVisualization: React.FC<SessionProgressVisualizationProps> 
     ];
   };
 
-  const loadConfidenceHistory = async (sessionId: string, timeRange: string): Promise<ConfidencePoint[]> => {
+  const loadConfidenceHistory = async (promptLabId: string, timeRange: string): Promise<ConfidencePoint[]> => {
     // Mock confidence evolution data
     const points: ConfidencePoint[] = [];
     const startTime = Date.now() - (timeRange === '24h' ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000);
@@ -189,7 +189,7 @@ const SessionProgressVisualization: React.FC<SessionProgressVisualizationProps> 
     return points;
   };
 
-  const loadPerformanceMetrics = async (sessionId: string, timeRange: string): Promise<PerformancePoint[]> => {
+  const loadPerformanceMetrics = async (promptLabId: string, timeRange: string): Promise<PerformancePoint[]> => {
     // Mock performance data
     return [
       {
@@ -219,10 +219,10 @@ const SessionProgressVisualization: React.FC<SessionProgressVisualizationProps> 
     ];
   };
 
-  const loadConvergenceAssessment = async (sessionId: string): Promise<ConvergenceData | null> => {
+  const loadConvergenceAssessment = async (promptLabId: string): Promise<ConvergenceData | null> => {
     try {
       // This would call the real convergence API
-      const response = await fetch(`/api/sessions/${sessionId}/convergence/`);
+      const response = await fetch(`/api/prompt-labs/${promptLabId}/convergence/`);
       if (response.ok) {
         return await response.json();
       }
@@ -256,7 +256,7 @@ const SessionProgressVisualization: React.FC<SessionProgressVisualizationProps> 
     };
   };
 
-  const loadFeedbackSummary = async (sessionId: string, timeRange: string): Promise<FeedbackSummary> => {
+  const loadFeedbackSummary = async (promptLabId: string, timeRange: string): Promise<FeedbackSummary> => {
     // Mock feedback summary
     return {
       totalFeedback: 45,
@@ -324,7 +324,7 @@ const SessionProgressVisualization: React.FC<SessionProgressVisualizationProps> 
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Learning Progress</h2>
-          <p className="text-gray-600">Session: {progressData.session.name}</p>
+          <p className="text-gray-600">Prompt Lab: {progressData.promptLab.name}</p>
         </div>
         
         <div className="flex items-center space-x-4">
@@ -619,4 +619,4 @@ const SessionProgressVisualization: React.FC<SessionProgressVisualizationProps> 
   );
 };
 
-export default SessionProgressVisualization;
+export default PromptLabProgressVisualization;

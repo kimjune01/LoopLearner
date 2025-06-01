@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import type { Session } from '../types/session';
-import { sessionService } from '../services/sessionService';
+import type { PromptLab } from '../types/promptLab';
+import { promptLabService } from '../services/promptLabService';
 import { PromptEditor } from './PromptEditor';
-import SessionProgressVisualization from './SessionProgressVisualization';
+import PromptLabProgressVisualization from './PromptLabProgressVisualization';
 
-export const SessionDetail: React.FC = () => {
+export const PromptLabDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const [session, setSession] = useState<Session | null>(null);
+  const [promptLab, setPromptLab] = useState<PromptLab | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
@@ -53,24 +53,24 @@ export const SessionDetail: React.FC = () => {
     return parts.length > 0 ? parts : text;
   };
 
-  const loadSession = async () => {
+  const loadPromptLab = async () => {
     if (!id) return;
     
     try {
       setLoading(true);
-      const sessionData = await sessionService.getSession(id);
-      setSession(sessionData);
+      const promptLabData = await promptLabService.getPromptLab(id);
+      setPromptLab(promptLabData);
       setError(null);
     } catch (err) {
-      setError('Failed to load session');
-      console.error('Error loading session:', err);
+      setError('Failed to load prompt lab');
+      console.error('Error loading prompt lab:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadSession();
+    loadPromptLab();
   }, [id]);
 
   // Close export menu when clicking outside
@@ -91,14 +91,14 @@ export const SessionDetail: React.FC = () => {
   }, [showExportMenu]);
 
   const handleSavePrompt = async (prompt: string) => {
-    if (!session || !id) return;
+    if (!promptLab || !id) return;
     
     try {
-      // Update session prompt via API
-      await sessionService.updateSessionPrompt(id, prompt);
+      // Update prompt lab prompt via API
+      await promptLabService.updatePromptLabPrompt(id, prompt);
       
       // Update local state immediately for responsive UI
-      setSession(prev => prev ? { 
+      setPromptLab(prev => prev ? { 
         ...prev, 
         active_prompt: prev.active_prompt ? { 
           ...prev.active_prompt, 
@@ -112,8 +112,8 @@ export const SessionDetail: React.FC = () => {
       } : null);
       setShowPromptEditor(false);
       
-      // Reload session to get fresh data from server
-      await loadSession();
+      // Reload prompt lab to get fresh data from server
+      await loadPromptLab();
     } catch (err) {
       console.error('Error saving prompt:', err);
       setError('Failed to save prompt');
@@ -121,9 +121,9 @@ export const SessionDetail: React.FC = () => {
   };
 
   const handleExportPrompt = (format: 'json' | 'txt' | 'md') => {
-    if (!session?.active_prompt?.content) return;
+    if (!promptLab?.active_prompt?.content) return;
 
-    const baseFilename = `${session.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_prompt_v${session.active_prompt.version}`;
+    const baseFilename = `${promptLab.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_prompt_v${promptLab.active_prompt.version}`;
     let content: string;
     let mimeType: string;
     let extension: string;
@@ -131,18 +131,18 @@ export const SessionDetail: React.FC = () => {
     switch (format) {
       case 'json':
         const exportData = {
-          session: {
-            id: session.id,
-            name: session.name,
-            description: session.description,
-            created_at: session.created_at,
-            updated_at: session.updated_at
+          promptLab: {
+            id: promptLab.id,
+            name: promptLab.name,
+            description: promptLab.description,
+            created_at: promptLab.created_at,
+            updated_at: promptLab.updated_at
           },
           prompt: {
-            id: session.active_prompt.id,
-            content: session.active_prompt.content,
-            version: session.active_prompt.version,
-            parameters: session.active_prompt.parameters || []
+            id: promptLab.active_prompt.id,
+            content: promptLab.active_prompt.content,
+            version: promptLab.active_prompt.version,
+            parameters: promptLab.active_prompt.parameters || []
           },
           export_metadata: {
             exported_at: new Date().toISOString(),
@@ -156,16 +156,16 @@ export const SessionDetail: React.FC = () => {
         break;
 
       case 'txt':
-        content = `System Prompt for ${session.name}
-Version: ${session.active_prompt.version}
-Created: ${new Date(session.created_at).toLocaleDateString()}
-Updated: ${new Date(session.updated_at).toLocaleDateString()}
+        content = `System Prompt for ${promptLab.name}
+Version: ${promptLab.active_prompt.version}
+Created: ${new Date(promptLab.created_at).toLocaleDateString()}
+Updated: ${new Date(promptLab.updated_at).toLocaleDateString()}
 
-${session.description ? `Description: ${session.description}\n\n` : ''}Parameters: ${(session.active_prompt.parameters || []).map(p => `{{${p}}}`).join(', ')}
+${promptLab.description ? `Description: ${promptLab.description}\n\n` : ''}Parameters: ${(promptLab.active_prompt.parameters || []).map(p => `{{${p}}}`).join(', ')}
 
 === PROMPT CONTENT ===
 
-${session.active_prompt.content}
+${promptLab.active_prompt.content}
 
 === END ===
 
@@ -175,23 +175,23 @@ Exported from LoopLearner on ${new Date().toLocaleString()}`;
         break;
 
       case 'md':
-        content = `# System Prompt: ${session.name}
+        content = `# System Prompt: ${promptLab.name}
 
-**Version:** ${session.active_prompt.version}  
-**Created:** ${new Date(session.created_at).toLocaleDateString()}  
-**Updated:** ${new Date(session.updated_at).toLocaleDateString()}  
+**Version:** ${promptLab.active_prompt.version}  
+**Created:** ${new Date(promptLab.created_at).toLocaleDateString()}  
+**Updated:** ${new Date(promptLab.updated_at).toLocaleDateString()}  
 
-${session.description ? `**Description:** ${session.description}\n\n` : ''}## Parameters
+${promptLab.description ? `**Description:** ${promptLab.description}\n\n` : ''}## Parameters
 
-${(session.active_prompt.parameters || []).length > 0 
-  ? (session.active_prompt.parameters || []).map(p => `- \`{{${p}}}\``).join('\n')
+${(promptLab.active_prompt.parameters || []).length > 0 
+  ? (promptLab.active_prompt.parameters || []).map(p => `- \`{{${p}}}\``).join('\n')
   : 'No parameters detected'
 }
 
 ## Prompt Content
 
 \`\`\`
-${session.active_prompt.content}
+${promptLab.active_prompt.content}
 \`\`\`
 
 ---
@@ -238,7 +238,7 @@ ${session.active_prompt.content}
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                Back to Sessions
+                Back to Prompt Labs
               </Link>
               <div className="w-px h-6 bg-white/30"></div>
               <h1 className="text-2xl font-bold text-white">Loading...</h1>
@@ -250,14 +250,14 @@ ${session.active_prompt.content}
         <div className="flex items-center justify-center min-h-[calc(100vh-120px)]">
           <div className="flex items-center gap-3 text-gray-600">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-            <span className="text-lg">Loading session...</span>
+            <span className="text-lg">Loading prompt lab...</span>
           </div>
         </div>
       </div>
     );
   }
 
-  if (error || !session) {
+  if (error || !promptLab) {
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
@@ -271,10 +271,10 @@ ${session.active_prompt.content}
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                Back to Sessions
+                Back to Prompt Labs
               </Link>
               <div className="w-px h-6 bg-white/30"></div>
-              <h1 className="text-2xl font-bold text-white">Session Not Found</h1>
+              <h1 className="text-2xl font-bold text-white">Prompt Lab Not Found</h1>
             </div>
           </div>
         </div>
@@ -287,13 +287,13 @@ ${session.active_prompt.content}
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Session Not Found</h2>
-            <p className="text-gray-600 mb-6">{error || 'The requested session could not be found.'}</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Prompt Lab Not Found</h2>
+            <p className="text-gray-600 mb-6">{error || 'The requested prompt lab could not be found.'}</p>
             <Link 
               to="/" 
               className="btn-primary"
             >
-              Back to Sessions
+              Back to Prompt Labs
             </Link>
           </div>
         </div>
@@ -315,28 +315,28 @@ ${session.active_prompt.content}
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                Back to Sessions
+                Back to Prompt Labs
               </Link>
               <div className="w-px h-6 bg-white/30"></div>
               <h1 className="text-2xl font-bold text-white">
-                {session.name}
+                {promptLab.name}
               </h1>
-              {session.description && (
+              {promptLab.description && (
                 <>
                   <div className="hidden sm:block w-px h-6 bg-white/30"></div>
                   <p className="hidden sm:block text-white/90 text-sm max-w-md truncate">
-                    {session.description}
+                    {promptLab.description}
                   </p>
                 </>
               )}
             </div>
             
-            {/* Session Status */}
+            {/* Prompt Lab Status */}
             <div className="flex items-center gap-3 bg-white/15 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
               <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${session.is_active ? 'bg-green-400' : 'bg-gray-400'}`}></div>
+                <div className={`w-3 h-3 rounded-full ${promptLab.is_active ? 'bg-green-400' : 'bg-gray-400'}`}></div>
                 <span className="text-white/80 text-sm font-medium">
-                  {session.is_active ? 'Active' : 'Inactive'}
+                  {promptLab.is_active ? 'Active' : 'Inactive'}
                 </span>
               </div>
             </div>
@@ -384,12 +384,12 @@ ${session.active_prompt.content}
                   Current System Prompt
                 </h2>
                 <p className="text-gray-600 text-lg">
-                  The evolving intelligence guiding this session
+                  The evolving intelligence guiding this prompt lab
                 </p>
               </div>
               
               <div className="card-elevated p-8 mb-6">
-                {session.active_prompt?.content ? (
+                {promptLab.active_prompt?.content ? (
                   <div className="space-y-6">
                     {/* Prompt Content */}
                     <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border-l-4 border-purple-500">
@@ -397,14 +397,14 @@ ${session.active_prompt.content}
                         <div className="flex items-center gap-3">
                           <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
                           <span className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
-                            Active Prompt • Version {session.active_prompt?.version || 1}
+                            Active Prompt • Version {promptLab.active_prompt?.version || 1}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
-                          Last updated: {new Date(session.updated_at).toLocaleDateString()}
+                          Last updated: {new Date(promptLab.updated_at).toLocaleDateString()}
                         </div>
                       </div>
                       
@@ -421,11 +421,11 @@ ${session.active_prompt.content}
                             maskImage: !isPromptExpanded ? 'linear-gradient(to bottom, black 85%, transparent 100%)' : 'none',
                             WebkitMaskImage: !isPromptExpanded ? 'linear-gradient(to bottom, black 85%, transparent 100%)' : 'none'
                           }}>
-                            {highlightParameters(session.active_prompt?.content || '')}
+                            {highlightParameters(promptLab.active_prompt?.content || '')}
                           </div>
                           
                           {/* Show More/Less Button */}
-                          {session.active_prompt?.content && session.active_prompt.content.split('\n').length > 20 && (
+                          {promptLab.active_prompt?.content && promptLab.active_prompt.content.split('\n').length > 20 && (
                             <div className="mt-4 text-center">
                               <button
                                 onClick={() => setIsPromptExpanded(!isPromptExpanded)}
@@ -453,7 +453,7 @@ ${session.active_prompt.content}
                       </div>
                       
                       {/* Parameters Info */}
-                      {session.active_prompt?.parameters && session.active_prompt.parameters.length > 0 && (
+                      {promptLab.active_prompt?.parameters && promptLab.active_prompt.parameters.length > 0 && (
                         <div className="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
                           <div className="flex items-start gap-3">
                             <div className="flex-shrink-0">
@@ -463,10 +463,10 @@ ${session.active_prompt.content}
                             </div>
                             <div className="flex-1">
                               <h4 className="font-semibold text-purple-900 mb-2">
-                                Parameters ({session.active_prompt.parameters.length})
+                                Parameters ({promptLab.active_prompt.parameters.length})
                               </h4>
                               <div className="flex flex-wrap gap-2">
-                                {session.active_prompt.parameters.map((param, index) => (
+                                {promptLab.active_prompt.parameters.map((param, index) => (
                                   <span 
                                     key={index}
                                     className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-800 rounded-md border border-purple-200 font-mono text-sm"
@@ -585,10 +585,10 @@ ${session.active_prompt.content}
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">No System Prompt Set</h3>
                     <p className="text-gray-600 mb-6">
-                      This session needs a system prompt to begin learning.
-                      {session.description && (
+                      This prompt lab needs a system prompt to begin learning.
+                      {promptLab.description && (
                         <span className="block mt-2 text-sm italic">
-                          Use your session description "{session.description}" as inspiration.
+                          Use your prompt lab description "{promptLab.description}" as inspiration.
                         </span>
                       )}
                     </p>
@@ -625,8 +625,8 @@ ${session.active_prompt.content}
                         </div>
                         <div className="text-left">
                           <p className="text-sm text-blue-800">
-                            <strong>Tip:</strong> Ask Claude to create a system prompt for "{session.name}"{session.description && ` based on: "${session.description}"`}. 
-                            This will give you a great starting point for your learning session.
+                            <strong>Tip:</strong> Ask Claude to create a system prompt for "{promptLab.name}"{promptLab.description && ` based on: "${promptLab.description}"`}. 
+                            This will give you a great starting point for your prompt lab.
                           </p>
                         </div>
                       </div>
@@ -638,31 +638,31 @@ ${session.active_prompt.content}
 
             {/* Secondary Info Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              {/* Session Metadata */}
+              {/* Prompt Lab Metadata */}
               <div className="card p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Session Info
+                  Prompt Lab Info
                 </h3>
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Created:</span>
-                    <span className="font-medium">{new Date(session.created_at).toLocaleDateString()}</span>
+                    <span className="font-medium">{new Date(promptLab.created_at).toLocaleDateString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Last Updated:</span>
-                    <span className="font-medium">{new Date(session.updated_at).toLocaleDateString()}</span>
+                    <span className="font-medium">{new Date(promptLab.updated_at).toLocaleDateString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Status:</span>
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                      session.is_active 
+                      promptLab.is_active 
                         ? 'bg-green-100 text-green-800' 
                         : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {session.is_active ? 'Active' : 'Inactive'}
+                      {promptLab.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                 </div>
@@ -702,13 +702,13 @@ ${session.active_prompt.content}
                 </h3>
                 <div className="space-y-2">
                   <button className="w-full btn-secondary text-left justify-start">
-                    Start Learning Session
+                    Start Learning Lab
                   </button>
                   <button className="w-full btn-secondary text-left justify-start">
                     Generate Test Email
                   </button>
                   <button className="w-full btn-secondary text-left justify-start">
-                    Export Session Data
+                    Export Prompt Lab Data
                   </button>
                 </div>
               </div>
@@ -727,7 +727,7 @@ ${session.active_prompt.content}
                   Test your prompt performance against predefined evaluation datasets.
                 </p>
                 <Link 
-                  to="/evaluation/datasets"
+                  to={`/prompt-labs/${id}/evaluation/datasets`}
                   className="btn-primary inline-flex items-center gap-2"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -743,8 +743,8 @@ ${session.active_prompt.content}
 
             {/* Progress Tab Content */}
             {activeTab === 'progress' && id && (
-              <SessionProgressVisualization 
-                sessionId={id}
+              <PromptLabProgressVisualization 
+                promptLabId={id}
                 onOptimizationTrigger={() => {
                   // TODO: Integrate with optimization trigger
                   console.log('Optimization triggered from progress view');
@@ -758,12 +758,12 @@ ${session.active_prompt.content}
       {/* Prompt Editor Modal */}
       {showPromptEditor && (
         <PromptEditor
-          initialPrompt={session?.active_prompt?.content || ''}
-          sessionName={session?.name}
-          sessionDescription={session?.description}
+          initialPrompt={promptLab?.active_prompt?.content || ''}
+          promptLabName={promptLab?.name}
+          promptLabDescription={promptLab?.description}
           onSave={handleSavePrompt}
           onCancel={() => setShowPromptEditor(false)}
-          isCreating={!session?.active_prompt?.content}
+          isCreating={!promptLab?.active_prompt?.content}
         />
       )}
     </div>

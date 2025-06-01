@@ -246,7 +246,7 @@ export const AboutPage: React.FC = () => {
               <div>
                 <h3 className="text-xl font-semibold mb-2">Continuous Learning</h3>
                 <p className="text-gray-600 mb-3">
-                  Each session learns from your preferences and builds a library of successful patterns. 
+                  Each prompt lab learns from your preferences and builds a library of successful patterns. 
                   Future optimizations get faster and more accurate as the system understands your style.
                 </p>
                 <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
@@ -445,7 +445,7 @@ export const AboutPage: React.FC = () => {
               <div className="bg-white/10 rounded-lg p-4">
                 <div className="text-2xl mb-2">🎯</div>
                 <h3 className="font-semibold mb-1">See Immediate Results</h3>
-                <p className="text-sm opacity-80">Get measurable improvements in your first session</p>
+                <p className="text-sm opacity-80">Get measurable improvements in your first prompt lab</p>
               </div>
               <div className="bg-white/10 rounded-lg p-4">
                 <div className="text-2xl mb-2">📈</div>

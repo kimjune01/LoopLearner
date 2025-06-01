@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { Session } from '../types/session';
+import type { PromptLab } from '../types/promptLab';
 import type { EvaluationDataset } from '../types/evaluation';
 
 export interface ExportOptions {
@@ -16,8 +16,8 @@ export interface ExportOptions {
   };
 }
 
-export interface SessionExportData {
-  session: {
+export interface PromptLabExportData {
+  prompt_lab: {
     id: string;
     name: string;
     description: string;
@@ -65,23 +65,31 @@ export interface SessionExportData {
 
 export class ExportService {
   /**
-   * Export complete session data
+   * Export complete prompt lab data
    */
-  async exportSession(sessionId: string, options: ExportOptions = { format: 'json' }): Promise<void> {
+  async exportPromptLab(promptLabId: string, options: ExportOptions = { format: 'json' }): Promise<void> {
     try {
-      // Get session data from backend
-      const response = await api.get(`/sessions/${sessionId}/export/`);
-      const sessionData: SessionExportData = response.data;
+      // Get prompt lab data from backend
+      const response = await api.get(`/prompt-labs/${promptLabId}/export/`);
+      const promptLabData: PromptLabExportData = response.data;
 
       // Apply filters based on options
-      const filteredData = this.filterSessionData(sessionData, options);
+      const filteredData = this.filterPromptLabData(promptLabData, options);
 
       // Export in requested format
-      await this.exportData(filteredData, `session_${sessionData.session.name}`, options);
+      await this.exportData(filteredData, `prompt_lab_${promptLabData.prompt_lab.name}`, options);
     } catch (error) {
-      console.error('Error exporting session:', error);
-      throw new Error('Failed to export session data');
+      console.error('Error exporting prompt lab:', error);
+      throw new Error('Failed to export prompt lab data');
     }
+  }
+
+  /**
+   * @deprecated Use exportPromptLab instead. This method will be removed in a future version.
+   * Export complete session data (legacy method for backwards compatibility)
+   */
+  async exportSession(sessionId: string, options: ExportOptions = { format: 'json' }): Promise<void> {
+    return this.exportPromptLab(sessionId, options);
   }
 
   /**
@@ -137,7 +145,7 @@ export class ExportService {
     try {
       // Get detailed session data
       const response = await api.get(`/sessions/${sessionId}/export/`);
-      const sessionData: SessionExportData = response.data;
+      const sessionData: PromptLabExportData = response.data;
 
       // Extract feedback data for analysis
       const feedbackData: Array<{
@@ -167,7 +175,7 @@ export class ExportService {
         });
       });
 
-      await this.exportData(feedbackData, `feedback_analytics_${sessionData.session.name}`, { format });
+      await this.exportData(feedbackData, `feedback_analytics_${sessionData.prompt_lab.name}`, { format });
     } catch (error) {
       console.error('Error exporting feedback analytics:', error);
       throw new Error('Failed to export feedback analytics');
@@ -175,11 +183,11 @@ export class ExportService {
   }
 
   /**
-   * Filter session data based on export options
+   * Filter prompt lab data based on export options
    */
-  private filterSessionData(data: SessionExportData, options: ExportOptions): Partial<SessionExportData> {
-    const filtered: Partial<SessionExportData> = {
-      session: data.session
+  private filterPromptLabData(data: PromptLabExportData, options: ExportOptions): Partial<PromptLabExportData> {
+    const filtered: Partial<PromptLabExportData> = {
+      prompt_lab: data.prompt_lab
     };
 
     if (options.includePrompts !== false) {
@@ -215,6 +223,14 @@ export class ExportService {
     }
 
     return filtered;
+  }
+
+  /**
+   * @deprecated Use filterPromptLabData instead. This method will be removed in a future version.
+   * Filter session data based on export options (legacy method for backwards compatibility)
+   */
+  private filterSessionData(data: PromptLabExportData, options: ExportOptions): Partial<PromptLabExportData> {
+    return this.filterPromptLabData(data, options);
   }
 
   /**
@@ -343,14 +359,14 @@ export class ExportService {
     
     let text = '';
     
-    if (data.session) {
-      text += `Session: ${data.session.name}\\n`;
-      text += `Description: ${data.session.description || 'No description'}\\n`;
-      text += `Created: ${new Date(data.session.created_at).toLocaleString()}\\n`;
-      text += `Updated: ${new Date(data.session.updated_at).toLocaleString()}\\n`;
-      text += `Optimization Iterations: ${data.session.optimization_iterations}\\n`;
-      text += `Total Emails: ${data.session.total_emails_processed}\\n`;
-      text += `Total Feedback: ${data.session.total_feedback_collected}\\n\\n`;
+    if (data.prompt_lab) {
+      text += `Prompt Lab: ${data.prompt_lab.name}\\n`;
+      text += `Description: ${data.prompt_lab.description || 'No description'}\\n`;
+      text += `Created: ${new Date(data.prompt_lab.created_at).toLocaleString()}\\n`;
+      text += `Updated: ${new Date(data.prompt_lab.updated_at).toLocaleString()}\\n`;
+      text += `Optimization Iterations: ${data.prompt_lab.optimization_iterations}\\n`;
+      text += `Total Emails: ${data.prompt_lab.total_emails_processed}\\n`;
+      text += `Total Feedback: ${data.prompt_lab.total_feedback_collected}\\n\\n`;
     }
 
     if (data.prompts && data.prompts.length > 0) {
@@ -379,14 +395,14 @@ export class ExportService {
   private convertToMarkdown(data: any): string {
     let md = '';
 
-    if (data.session) {
-      md += `# ${data.session.name}\\n\\n`;
-      md += `**Description:** ${data.session.description || 'No description'}\\n`;
-      md += `**Created:** ${new Date(data.session.created_at).toLocaleString()}\\n`;
-      md += `**Updated:** ${new Date(data.session.updated_at).toLocaleString()}\\n`;
-      md += `**Optimization Iterations:** ${data.session.optimization_iterations}\\n`;
-      md += `**Total Emails:** ${data.session.total_emails_processed}\\n`;
-      md += `**Total Feedback:** ${data.session.total_feedback_collected}\\n\\n`;
+    if (data.prompt_lab) {
+      md += `# ${data.prompt_lab.name}\\n\\n`;
+      md += `**Description:** ${data.prompt_lab.description || 'No description'}\\n`;
+      md += `**Created:** ${new Date(data.prompt_lab.created_at).toLocaleString()}\\n`;
+      md += `**Updated:** ${new Date(data.prompt_lab.updated_at).toLocaleString()}\\n`;
+      md += `**Optimization Iterations:** ${data.prompt_lab.optimization_iterations}\\n`;
+      md += `**Total Emails:** ${data.prompt_lab.total_emails_processed}\\n`;
+      md += `**Total Feedback:** ${data.prompt_lab.total_feedback_collected}\\n\\n`;
     }
 
     if (data.prompts && data.prompts.length > 0) {

@@ -5,7 +5,7 @@ These tests define the expected behavior for evaluation models.
 import pytest
 from django.test import TestCase
 from django.core.exceptions import ValidationError
-from core.models import Session, SystemPrompt, EvaluationDataset, EvaluationCase, EvaluationRun, EvaluationResult
+from core.models import PromptLab, SystemPrompt, EvaluationDataset, EvaluationCase, EvaluationRun, EvaluationResult
 
 
 class EvaluationDatasetModelTests(TestCase):
@@ -13,46 +13,46 @@ class EvaluationDatasetModelTests(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="A test session for evaluation"
         )
     
     def test_create_evaluation_dataset(self):
         """Test creating an evaluation dataset with valid data"""
         dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Test Dataset",
             description="A test evaluation dataset"
         )
         
         self.assertEqual(dataset.name, "Test Dataset")
         self.assertEqual(dataset.description, "A test evaluation dataset")
-        self.assertEqual(dataset.session, self.session)
+        self.assertEqual(dataset.session, self.prompt_lab)
         self.assertIsNotNone(dataset.created_at)
         self.assertIsNotNone(dataset.updated_at)
     
     def test_evaluation_dataset_str_representation(self):
         """Test string representation of dataset"""
         dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Test Dataset"
         )
-        expected_str = f"Test Dataset ({self.session.name})"
+        expected_str = f"Test Dataset ({self.prompt_lab.name})"
         self.assertEqual(str(dataset), expected_str)
     
     def test_evaluation_dataset_session_relationship(self):
-        """Test that dataset is properly linked to session"""
+        """Test that dataset is properly linked to """
         dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Test Dataset"
         )
         
         # Test forward relationship
-        self.assertEqual(dataset.session, self.session)
+        self.assertEqual(dataset.session, self.prompt_lab)
         
         # Test reverse relationship
-        self.assertIn(dataset, self.session.evaluation_datasets.all())
+        self.assertIn(dataset, self.prompt_lab.evaluation_datasets.all())
 
 
 class EvaluationCaseModelTests(TestCase):
@@ -60,12 +60,12 @@ class EvaluationCaseModelTests(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="A test session for evaluation"
         )
         self.dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Test Dataset"
         )
     
@@ -127,16 +127,16 @@ class EvaluationRunModelTests(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="A test session for evaluation"
         )
         self.dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Test Dataset"
         )
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="You are a helpful assistant.",
             version=1
         )
@@ -180,12 +180,12 @@ class EvaluationResultModelTests(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="A test session for evaluation"
         )
         self.dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Test Dataset"
         )
         self.case = EvaluationCase.objects.create(
@@ -194,7 +194,7 @@ class EvaluationResultModelTests(TestCase):
             expected_output="4"
         )
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="You are a helpful assistant.",
             version=1
         )

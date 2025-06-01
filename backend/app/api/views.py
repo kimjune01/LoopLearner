@@ -8,7 +8,7 @@ import asyncio
 import logging
 from asgiref.sync import sync_to_async
 
-from core.models import Session, Email, Draft, DraftReason, SystemPrompt, UserFeedback, ReasonRating
+from core.models import PromptLab, Email, Draft, DraftReason, SystemPrompt, UserFeedback, ReasonRating
 from app.services.unified_llm_provider import LLMProviderFactory, EmailDraft
 from app.services.email_generator import SyntheticEmailGenerator
 from app.services.human_feedback_integrator import HumanFeedbackIntegrator
@@ -33,20 +33,20 @@ class GenerateSyntheticEmailView(EmailAPIView):
     """Generate synthetic email for testing"""
     
     def post(self, request, session_id=None):
-        # Handle both session-scoped and legacy calls
+        # Handle both prompt lab-scoped and legacy calls
         if session_id:
-            session = get_object_or_404(Session, id=session_id, is_active=True)
+            prompt_lab = get_object_or_404(PromptLab, id=session_id, is_active=True)
         else:
-            # For legacy support, use a default session or create one
-            session = Session.objects.filter(is_active=True).first()
-            if not session:
-                session = Session.objects.create(
-                    name="Default Session",
+            # For legacy support, use a default prompt lab or create one
+            prompt_lab = PromptLab.objects.filter(is_active=True).first()
+            if not prompt_lab:
+                prompt_lab = PromptLab.objects.create(
+                    name="Default PromptLab",
                     description="Auto-created for legacy API compatibility"
                 )
-                # Create initial prompt for default session
+                # Create initial prompt for default prompt lab
                 SystemPrompt.objects.create(
-                    session=session,
+                    prompt_lab=prompt_lab,
                     content="You are a helpful email assistant that generates professional and appropriate email responses.",
                     version=1,
                     is_active=True
@@ -62,7 +62,7 @@ class GenerateSyntheticEmailView(EmailAPIView):
         
         # Generate synthetic email (use sync method)
         generator = SyntheticEmailGenerator()
-        email = generator.generate_synthetic_email_sync(scenario_type, session=session)
+        email = generator.generate_synthetic_email_sync(scenario_type, prompt_lab=prompt_lab)
         
         return Response({
             'email_id': email.id,
@@ -71,7 +71,7 @@ class GenerateSyntheticEmailView(EmailAPIView):
             'sender': email.sender,
             'scenario_type': email.scenario_type,
             'created_at': email.created_at.isoformat(),
-            'session_id': str(session.id)
+            'prompt_lab_id': str(prompt_lab.id)
         }, status=status.HTTP_201_CREATED)
 
 
@@ -80,9 +80,9 @@ class CreateDraftView(EmailAPIView):
     
     def post(self, request, email_id, session_id=None):
         if session_id:
-            # Session-scoped: verify email belongs to session
-            session = get_object_or_404(Session, id=session_id, is_active=True)
-            email = get_object_or_404(Email, id=email_id, session=session)
+            # PromptLab-scoped: verify email belongs to prompt lab
+            prompt_lab = get_object_or_404(PromptLab, id=session_id, is_active=True)
+            email = get_object_or_404(Email, id=email_id, prompt_lab=prompt_lab)
         else:
             # Legacy: any email
             email = get_object_or_404(Email, id=email_id)
@@ -109,11 +109,21 @@ class CreateDraftView(EmailAPIView):
             except (ValueError, TypeError):
                 return Response({'error': 'num_drafts must be a valid integer'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Get or create a system prompt
-        system_prompt, created = SystemPrompt.objects.get_or_create(
-            version=1,
-            defaults={'content': 'You are a helpful email assistant.'}
-        )
+        # Get or create a system prompt for the prompt lab
+        if session_id:
+            # Use the prompt lab we already fetched above
+            system_prompt, created = SystemPrompt.objects.get_or_create(
+                prompt_lab=prompt_lab,
+                version=1,
+                defaults={'content': 'You are a helpful email assistant.'}
+            )
+        else:
+            # Legacy: global prompt (prompt_lab=None)
+            system_prompt, created = SystemPrompt.objects.get_or_create(
+                prompt_lab=None,
+                version=1,
+                defaults={'content': 'You are a helpful email assistant.'}
+            )
         
         # Create draft responses in database
         draft_data = [
@@ -434,19 +444,19 @@ class TriggerOptimizationView(EmailAPIView):
             return Response({'error': 'session_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            # Get the session
-            session = Session.objects.get(id=session_id, is_active=True)
-        except Session.DoesNotExist:
-            return Response({'error': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
+            # Get the prompt lab
+            prompt_lab = PromptLab.objects.get(id=session_id, is_active=True)
+        except PromptLab.DoesNotExist:
+            return Response({'error': 'PromptLab not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        # Check if session has an active prompt
-        active_prompt = SystemPrompt.objects.filter(session=session, is_active=True).first()
+        # Check if prompt lab has an active prompt
+        active_prompt = SystemPrompt.objects.filter(prompt_lab=prompt_lab, is_active=True).first()
         if not active_prompt:
-            return Response({'error': 'No active prompt found for session'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'No active prompt found for prompt lab'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Get feedback for this session
+        # Get feedback for this prompt lab
         feedback_list = UserFeedback.objects.filter(
-            draft__email__session=session
+            draft__email__prompt_lab=prompt_lab
         ).select_related('draft', 'draft__email').order_by('-created_at')
         
         if not feedback_list.exists():

@@ -5,7 +5,7 @@ Following TDD principles: Write failing tests first that define expected behavio
 import pytest
 from django.test import TestCase
 from django.core.exceptions import ValidationError
-from core.models import Session, SystemPrompt, Email, Draft, UserFeedback
+from core.models import PromptLab, SystemPrompt, Email, Draft, UserFeedback
 
 
 class TestDraftReasonModel(TestCase):
@@ -13,19 +13,19 @@ class TestDraftReasonModel(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="Test session for reasoning"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1
         )
         
         self.email = Email.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             subject="Test Email",
             body="Test email body",
             sender="test@example.com"
@@ -160,19 +160,19 @@ class TestReasonRatingModel(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="Test session for ratings"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1
         )
         
         self.email = Email.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             subject="Test Email",
             body="Test email body",
             sender="test@example.com"

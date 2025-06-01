@@ -1,25 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import type { Session, SessionStats } from '../types/session';
-import { sessionService } from '../services/sessionService';
+import type { PromptLab, PromptLabStats } from '../types/promptLab';
+import { promptLabService } from '../services/promptLabService';
 
-interface SessionCardProps {
-  session: Session;
-  onView: (sessionId: string) => void;
-  onEdit: (sessionId: string) => void;
-  onDelete: (sessionId: string) => void;
-  onDuplicate: (sessionId: string) => void;
-  onExport: (sessionId: string) => void;
+interface PromptLabCardProps {
+  promptLab: PromptLab;
+  onView: (promptLabId: string) => void;
+  onEdit: (promptLabId: string) => void;
+  onDelete: (promptLabId: string) => void;
+  onDuplicate: (promptLabId: string) => void;
+  onExport: (promptLabId: string) => void;
 }
 
-export const SessionCard: React.FC<SessionCardProps> = ({
-  session,
+export const PromptLabCard: React.FC<PromptLabCardProps> = ({
+  promptLab,
   onView,
   onEdit,
   onDelete,
   onDuplicate,
   onExport
 }) => {
-  const [stats, setStats] = useState<SessionStats | null>(null);
+  const [stats, setStats] = useState<PromptLabStats | null>(null);
   const [showActions, setShowActions] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -27,17 +27,17 @@ export const SessionCard: React.FC<SessionCardProps> = ({
     const loadStats = async () => {
       try {
         setLoading(true);
-        const sessionStats = await sessionService.getSessionStats(session.id);
-        setStats(sessionStats);
+        const promptLabStats = await promptLabService.getPromptLabStats(promptLab.id);
+        setStats(promptLabStats);
       } catch (err) {
-        console.error('Failed to load session stats:', err);
+        console.error('Failed to load prompt lab stats:', err);
       } finally {
         setLoading(false);
       }
     };
 
     loadStats();
-  }, [session.id]);
+  }, [promptLab.id]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -50,7 +50,7 @@ export const SessionCard: React.FC<SessionCardProps> = ({
   };
 
   const getStatusBadge = () => {
-    if (session.optimization_iterations > 0) {
+    if (promptLab.optimization_iterations > 0) {
       return (
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
           Learning
@@ -89,7 +89,7 @@ export const SessionCard: React.FC<SessionCardProps> = ({
       {/* Header */}
       <div className="flex justify-between items-start mb-4">
         <div className="flex-1">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">{session.name}</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">{promptLab.name}</h3>
           {getStatusBadge()}
         </div>
         <div className="relative">
@@ -104,32 +104,32 @@ export const SessionCard: React.FC<SessionCardProps> = ({
           {showActions && (
             <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-48 py-1">
               <button 
-                onClick={() => onView(session.id)}
+                onClick={() => onView(promptLab.id)}
                 className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
               >
-                View Session
+                View Prompt Lab
               </button>
               <button 
-                onClick={() => onEdit(session.id)}
+                onClick={() => onEdit(promptLab.id)}
                 className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
               >
                 Edit Details
               </button>
               <button 
-                onClick={() => onDuplicate(session.id)}
+                onClick={() => onDuplicate(promptLab.id)}
                 className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
               >
                 Duplicate
               </button>
               <button 
-                onClick={() => onExport(session.id)}
+                onClick={() => onExport(promptLab.id)}
                 className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
               >
                 Export Data
               </button>
               <hr className="my-1" />
               <button 
-                onClick={() => onDelete(session.id)}
+                onClick={() => onDelete(promptLab.id)}
                 className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
               >
                 Delete
@@ -141,18 +141,18 @@ export const SessionCard: React.FC<SessionCardProps> = ({
 
       {/* Description */}
       <div className="text-gray-600 text-sm mb-4 flex-1">
-        {session.description || 'No description provided'}
+        {promptLab.description || 'No description provided'}
       </div>
 
       {/* Metadata */}
       <div className="text-xs text-gray-500 mb-4 space-y-1">
         <div className="flex justify-between">
           <span>Created</span>
-          <span>{formatDate(session.created_at)}</span>
+          <span>{formatDate(promptLab.created_at)}</span>
         </div>
         <div className="flex justify-between">
           <span>Last Updated</span>
-          <span>{formatDate(session.updated_at)}</span>
+          <span>{formatDate(promptLab.updated_at)}</span>
         </div>
       </div>
 
@@ -194,9 +194,9 @@ export const SessionCard: React.FC<SessionCardProps> = ({
       {/* Footer */}
       <button 
         className="w-full mt-auto py-3 px-4 bg-gray-50 hover:bg-purple-600 hover:text-white text-gray-700 font-medium rounded-lg transition-all duration-200 border border-gray-200 hover:border-purple-600"
-        onClick={() => onView(session.id)}
+        onClick={() => onView(promptLab.id)}
       >
-        Open Session →
+        Open Prompt Lab →
       </button>
     </div>
   );

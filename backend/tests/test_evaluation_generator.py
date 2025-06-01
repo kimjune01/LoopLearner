@@ -5,7 +5,7 @@ Following TDD principles - these tests define the expected behavior for case gen
 import json
 import pytest
 from django.test import TestCase, Client
-from core.models import Session, SystemPrompt, EvaluationDataset, EvaluationCase
+from core.models import PromptLab, SystemPrompt, EvaluationDataset, EvaluationCase
 
 
 class EvaluationGeneratorStoryTests(TestCase):
@@ -14,18 +14,18 @@ class EvaluationGeneratorStoryTests(TestCase):
     def setUp(self):
         """Set up test data"""
         self.client = Client()
-        self.session = Session.objects.create(
-            name="Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="A test session for evaluation"
         )
         self.dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Test Dataset",
             description="A test evaluation dataset",
             parameters=["user_name", "product_type", "user_question"]
         )
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="You are a helpful customer service assistant. Help {{user_name}} with their {{product_type}} question: {{user_question}}",
             version=1,
             is_active=True,
@@ -109,7 +109,7 @@ class EvaluationGeneratorStoryTests(TestCase):
         """
         # Create prompt with typed parameters
         typed_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Send email to {{customer_email}} about their {{order_id}} for {{product_name}}",
             version=2,
             parameters=["customer_email", "order_id", "product_name"]

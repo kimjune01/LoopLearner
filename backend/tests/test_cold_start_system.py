@@ -1,6 +1,6 @@
 """
 Test confidence-based cold start functionality.
-This implements intelligent session initialization to quickly learn user preferences.
+This implements intelligent  initialization to quickly learn user preferences.
 """
 import uuid
 from unittest.mock import Mock, patch, MagicMock
@@ -10,8 +10,8 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core.models import (
-    Session, SystemPrompt, UserPreference, Email, Draft, 
-    UserFeedback, SessionConfidence
+    PromptLab, SystemPrompt, UserPreference, Email, Draft, 
+    UserFeedback, PromptLabConfidence
 )
 from app.services.cold_start_manager import ColdStartManager
 from app.services.email_generator import SyntheticEmailGenerator
@@ -22,32 +22,32 @@ class ColdStartManagerTests(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="Test cold start"
         )
         
         # Create initial system prompt
         self.system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="You are a helpful assistant.",
             version=1,
             is_active=True
         )
     
     def test_initialize_new_session_with_strategic_emails(self):
-        """Test that cold start generates strategic synthetic emails for new session"""
+        """Test that cold start generates strategic synthetic emails for new """
         manager = ColdStartManager()
         
-        # Initialize cold start for the session
-        result = manager.initialize_cold_start(self.session)
+        # Initialize cold start for the 
+        result = manager.initialize_cold_start(self.prompt_lab)
         
         # Should generate strategic emails
         self.assertTrue(result.success)
         self.assertGreater(result.emails_generated, 0)
         
         # Check that emails were created with diverse scenarios
-        emails = Email.objects.filter(session=self.session, is_synthetic=True)
+        emails = Email.objects.filter(prompt_lab=self.prompt_lab, is_synthetic=True)
         self.assertGreaterEqual(emails.count(), 5)  # At least 5 diverse scenarios
         
         # Verify diversity of scenarios
@@ -59,7 +59,7 @@ class ColdStartManagerTests(TestCase):
         manager = ColdStartManager()
         
         # Generate strategic emails
-        emails = manager.generate_strategic_emails(self.session)
+        emails = manager.generate_strategic_emails(self.prompt_lab)
         
         # Should cover multiple preference dimensions
         self.assertGreaterEqual(len(emails), 5)
@@ -82,10 +82,10 @@ class ColdStartManagerTests(TestCase):
         manager = ColdStartManager()
         
         # Initialize cold start
-        manager.initialize_cold_start(self.session)
+        manager.initialize_cold_start(self.prompt_lab)
         
         # Simulate user feedback on generated emails
-        emails = Email.objects.filter(session=self.session, is_synthetic=True)[:3]
+        emails = Email.objects.filter(prompt_lab=self.prompt_lab, is_synthetic=True)[:3]
         
         # User accepts formal/professional drafts, rejects casual ones
         for email in emails:
@@ -109,7 +109,7 @@ class ColdStartManagerTests(TestCase):
                 )
         
         # Analyze feedback to learn preferences
-        preferences = manager.analyze_cold_start_feedback(self.session)
+        preferences = manager.analyze_cold_start_feedback(self.prompt_lab)
         
         # Should identify preference for professional tone
         self.assertIn('tone', preferences)
@@ -128,7 +128,7 @@ class ColdStartManagerTests(TestCase):
         
         with patch.object(manager, 'analyze_cold_start_feedback', return_value=learned_preferences):
             # Apply learned preferences
-            new_prompt = manager.apply_learned_preferences(self.session, learned_preferences)
+            new_prompt = manager.apply_learned_preferences(self.prompt_lab, learned_preferences)
             
             # Verify prompt was updated
             self.assertIsNotNone(new_prompt)
@@ -150,7 +150,7 @@ class ColdStartManagerTests(TestCase):
         manager = ColdStartManager()
         
         # Check if optimization should be allowed
-        should_allow = manager.should_allow_optimization(self.session)
+        should_allow = manager.should_allow_optimization(self.prompt_lab)
         
         # Should not allow optimization during cold start
         self.assertFalse(should_allow)
@@ -158,7 +158,7 @@ class ColdStartManagerTests(TestCase):
         # Simulate enough feedback to build confidence
         for i in range(10):
             email = Email.objects.create(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 subject=f"Test {i}",
                 body="Test body",
                 sender="test@example.com",
@@ -178,14 +178,14 @@ class ColdStartManagerTests(TestCase):
         # Update confidence
         from app.services.confidence_calculator import ConfidenceCalculator
         calculator = ConfidenceCalculator()
-        confidence = SessionConfidence.objects.create(
-            session=self.session,
-            user_confidence=calculator.calculate_user_confidence(self.session),
-            system_confidence=calculator.calculate_system_confidence(self.session)
+        confidence = PromptLabConfidence.objects.create(
+            prompt_lab=self.prompt_lab,
+            user_confidence=calculator.calculate_user_confidence(self.prompt_lab),
+            system_confidence=calculator.calculate_system_confidence(self.prompt_lab)
         )
         
         # Now should allow optimization if confidence is sufficient
-        should_allow = manager.should_allow_optimization(self.session)
+        should_allow = manager.should_allow_optimization(self.prompt_lab)
         if confidence.user_confidence >= 0.4 and confidence.system_confidence >= 0.4:
             self.assertTrue(should_allow)
     
@@ -194,13 +194,13 @@ class ColdStartManagerTests(TestCase):
         manager = ColdStartManager()
         
         # Initially not complete
-        self.assertFalse(manager.is_cold_start_complete(self.session))
+        self.assertFalse(manager.is_cold_start_complete(self.prompt_lab))
         
         # Simulate feedback collection
         emails_and_feedback = []
         for i in range(10):  # Generate enough feedback
             email = Email.objects.create(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 subject=f"Strategic email {i}",
                 body="Testing preferences",
                 sender="test@example.com",
@@ -220,13 +220,13 @@ class ColdStartManagerTests(TestCase):
             emails_and_feedback.append((email, draft, feedback))
         
         # Check if cold start is complete
-        is_complete = manager.is_cold_start_complete(self.session)
+        is_complete = manager.is_cold_start_complete(self.prompt_lab)
         
         # Should be complete with sufficient feedback
         # Note: This might fail if confidence calculation has issues
         # Let's check the components
         feedback_count = UserFeedback.objects.filter(
-            draft__email__session=self.session
+            draft__email__prompt_lab=self.prompt_lab
         ).count()
         self.assertGreaterEqual(feedback_count, 10, f"Expected at least 10 feedback items, got {feedback_count}")
         
@@ -239,10 +239,10 @@ class ColdStartManagerTests(TestCase):
         
         # First ensure cold start is complete by adding synthetic emails and feedback
         # Initialize cold start
-        manager.initialize_cold_start(self.session)
+        manager.initialize_cold_start(self.prompt_lab)
         
         # Add feedback to synthetic emails to complete cold start
-        synthetic_emails = Email.objects.filter(session=self.session, is_synthetic=True)[:5]
+        synthetic_emails = Email.objects.filter(prompt_lab=self.prompt_lab, is_synthetic=True)[:5]
         for email in synthetic_emails:
             draft = Draft.objects.create(
                 email=email,
@@ -256,12 +256,12 @@ class ColdStartManagerTests(TestCase):
             )
         
         # Get initial recommendation for synthetic email ratio
-        initial_ratio = manager.get_synthetic_email_ratio(self.session)
+        initial_ratio = manager.get_synthetic_email_ratio(self.prompt_lab)
         
         # Add real emails and feedback
         for i in range(10):
             email = Email.objects.create(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 subject=f"Real email {i}",
                 body="Real content",
                 sender="user@example.com",
@@ -279,11 +279,11 @@ class ColdStartManagerTests(TestCase):
             )
         
         # Ratio should decrease as we get more real feedback
-        new_ratio = manager.get_synthetic_email_ratio(self.session)
+        new_ratio = manager.get_synthetic_email_ratio(self.prompt_lab)
         
         # Check that we've completed cold start and ratio has decreased
         total_feedback = UserFeedback.objects.filter(
-            draft__email__session=self.session
+            draft__email__prompt_lab=self.prompt_lab
         ).count()
         
         # With enough feedback, ratio should be lower
@@ -299,21 +299,21 @@ class ColdStartAPITests(APITestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="API Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="API Test PromptLab",
             description="Testing cold start API"
         )
         
         self.system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="You are a helpful assistant.",
             version=1,
             is_active=True
         )
     
     def test_trigger_cold_start_api(self):
-        """Test API endpoint to trigger cold start for a session"""
-        url = reverse('session-cold-start', args=[self.session.id])
+        """Test API endpoint to trigger cold start for a """
+        url = reverse('prompt-lab-cold-start', args=[self.prompt_lab.id])
         
         response = self.client.post(url)
         
@@ -329,7 +329,7 @@ class ColdStartAPITests(APITestCase):
     
     def test_get_cold_start_status_api(self):
         """Test API endpoint to get cold start status"""
-        url = reverse('session-cold-start-status', args=[self.session.id])
+        url = reverse('prompt-lab-cold-start-status', args=[self.prompt_lab.id])
         
         response = self.client.get(url)
         
@@ -345,7 +345,7 @@ class ColdStartAPITests(APITestCase):
     
     def test_apply_learned_preferences_api(self):
         """Test API endpoint to apply learned preferences from cold start"""
-        url = reverse('session-apply-preferences', args=[self.session.id])
+        url = reverse('prompt-lab-apply-preferences', args=[self.prompt_lab.id])
         
         # Mock some learned preferences
         with patch('app.services.cold_start_manager.ColdStartManager.analyze_cold_start_feedback') as mock_analyze:
@@ -371,13 +371,13 @@ class ColdStartIntegrationTests(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Integration Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Integration Test PromptLab",
             description="Testing cold start integration"
         )
         
         self.system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="You are a helpful assistant.",
             version=1,
             is_active=True
@@ -401,14 +401,14 @@ class ColdStartIntegrationTests(TestCase):
         cold_start_manager = ColdStartManager()
         
         # Initialize cold start
-        cold_start_manager.initialize_cold_start(self.session)
+        cold_start_manager.initialize_cold_start(self.prompt_lab)
         
         # Check if optimization should be allowed
-        should_allow = cold_start_manager.should_allow_optimization(self.session)
+        should_allow = cold_start_manager.should_allow_optimization(self.prompt_lab)
         self.assertFalse(should_allow)
         
         # Test the orchestrator's cold start check
-        result = orchestrator._check_cold_start_status(self.session)
+        result = orchestrator._check_cold_start_status(self.prompt_lab)
         self.assertFalse(result)
     
     def test_cold_start_integrates_with_confidence_tracking(self):
@@ -419,10 +419,10 @@ class ColdStartIntegrationTests(TestCase):
         calculator = ConfidenceCalculator()
         
         # Initialize cold start
-        manager.initialize_cold_start(self.session)
+        manager.initialize_cold_start(self.prompt_lab)
         
         # Generate some feedback
-        emails = Email.objects.filter(session=self.session, is_synthetic=True)[:3]
+        emails = Email.objects.filter(prompt_lab=self.prompt_lab, is_synthetic=True)[:3]
         for email in emails:
             draft = Draft.objects.create(
                 email=email,
@@ -436,15 +436,15 @@ class ColdStartIntegrationTests(TestCase):
             )
         
         # Check confidence levels
-        user_conf = calculator.calculate_user_confidence(self.session)
-        system_conf = calculator.calculate_system_confidence(self.session)
+        user_conf = calculator.calculate_user_confidence(self.prompt_lab)
+        system_conf = calculator.calculate_system_confidence(self.prompt_lab)
         
         # During cold start, confidence should be building
         self.assertGreater(user_conf, 0)
         self.assertGreater(system_conf, 0)
         
         # Check if cold start is complete
-        is_complete = calculator.is_cold_start_complete(self.session)
+        is_complete = calculator.is_cold_start_complete(self.prompt_lab)
         self.assertIsInstance(is_complete, bool)
     
     def test_cold_start_preference_extraction_integration(self):
@@ -455,10 +455,10 @@ class ColdStartIntegrationTests(TestCase):
         extractor = PreferenceExtractor()
         
         # Initialize cold start and generate feedback
-        manager.initialize_cold_start(self.session)
+        manager.initialize_cold_start(self.prompt_lab)
         
         # Simulate diverse feedback
-        emails = Email.objects.filter(session=self.session, is_synthetic=True)
+        emails = Email.objects.filter(prompt_lab=self.prompt_lab, is_synthetic=True)
         for i, email in enumerate(emails[:5]):
             draft = Draft.objects.create(
                 email=email,
@@ -472,7 +472,7 @@ class ColdStartIntegrationTests(TestCase):
             )
         
         # Extract preferences using the correct method
-        preferences = extractor.extract_all_preferences(self.session)
+        preferences = extractor.extract_all_preferences(self.prompt_lab)
         
         # Should have extracted preferences from cold start feedback
         self.assertIsInstance(preferences, list)

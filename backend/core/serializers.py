@@ -1,13 +1,13 @@
 from rest_framework import serializers
 from .models import (
-    Session, SystemPrompt, UserPreference, Email, DraftReason, Draft, 
+    PromptLab, SystemPrompt, UserPreference, Email, DraftReason, Draft, 
     UserFeedback, ReasonRating, EvaluationSnapshot, OptimizationRun
 )
 
 
-class SessionSerializer(serializers.ModelSerializer):
+class PromptLabSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Session
+        model = PromptLab
         fields = [
             'id', 'name', 'description', 'created_at', 'updated_at', 'is_active',
             'optimization_iterations', 'total_emails_processed', 'total_feedback_collected'

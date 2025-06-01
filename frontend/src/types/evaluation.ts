@@ -10,6 +10,7 @@ export interface EvaluationDataset {
   parameter_descriptions: Record<string, string>;
   created_at: string;
   updated_at: string;
+  prompt_lab_id?: string;
   case_count?: number;
   last_run?: string;
   average_score?: number;
@@ -55,10 +56,22 @@ export interface DatasetCompatibility {
 
 export interface CasePreview {
   preview_id: string;
-  template: string;
+  template?: string;
   parameters: Record<string, string>;
-  generated_input: string;
-  generated_output: string;
+  // PromptLab-based generation fields
+  input_text?: string;
+  expected_output?: string;
+  // Template-based generation fields  
+  generated_input?: string;
+  generated_output?: string;
+  // Output variations
+  output_variations?: Array<{
+    index: number;
+    text: string;
+    style: string;
+  }>;
+  selected_output_index?: number | null;
+  custom_output?: string | null;
   dataset_id: number;
 }
 

@@ -8,7 +8,7 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 import logging
 
-from core.models import Session
+from core.models import PromptLab
 from app.services.compute_optimizer import ComputeOptimizer
 
 logger = logging.getLogger(__name__)
@@ -61,21 +61,21 @@ class ComputeBudgetView(APIView):
         return recommendations
 
 
-class SessionComputeCostView(APIView):
-    """Get compute cost estimates for a session"""
+class PromptLabComputeCostView(APIView):
+    """Get compute cost estimates for a prompt lab"""
     
     def get(self, request, session_id):
-        """Get compute cost breakdown for session"""
-        session = get_object_or_404(Session, id=session_id, is_active=True)
+        """Get compute cost breakdown for prompt lab"""
+        prompt_lab = get_object_or_404(PromptLab, id=session_id, is_active=True)
         
         try:
             optimizer = ComputeOptimizer()
             
             # Current costs
-            cost_estimate = optimizer.estimate_optimization_cost(session)
+            cost_estimate = optimizer.estimate_optimization_cost(prompt_lab)
             
             # Should we continue?
-            optimization_decision = optimizer.should_continue_optimization(session)
+            optimization_decision = optimizer.should_continue_optimization(prompt_lab)
             
             # Historical costs (simplified - in production, track actual costs)
             historical_costs = {
@@ -107,7 +107,7 @@ class SessionComputeCostView(APIView):
         
         if optimization_decision.get('stage') == 'diminishing_returns':
             tips.append({
-                'tip': 'Session in diminishing returns phase',
+                'tip': 'PromptLab in diminishing returns phase',
                 'savings': 'Stop now to save ~$0.50-1.00',
                 'impact': 'Minimal performance improvement expected'
             })
@@ -151,7 +151,7 @@ class BatchOptimizationView(APIView):
             
             for session_id in session_ids:
                 try:
-                    session = Session.objects.get(id=session_id, is_active=True)
+                    prompt_lab = PromptLab.objects.get(id=session_id, is_active=True)
                     
                     # Check if optimization is worthwhile
                     should_optimize = optimizer.should_continue_optimization(session)
@@ -169,10 +169,10 @@ class BatchOptimizationView(APIView):
                     if should_optimize.get('continue', False):
                         total_estimated_cost += cost_estimate['total_cost']
                         
-                except Session.DoesNotExist:
+                except PromptLab.DoesNotExist:
                     batch_analysis.append({
                         'session_id': str(session_id),
-                        'error': 'Session not found'
+                        'error': 'PromptLab not found'
                     })
             
             # Calculate batch savings

@@ -1,96 +1,96 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import type { Session } from '../types/session';
-import { sessionService } from '../services/sessionService';
-import { SessionCreator } from './SessionCreator';
-import { SessionCard } from './SessionCard';
+import type { PromptLab } from '../types/promptLab';
+import { promptLabService } from '../services/promptLabService';
+import { PromptLabCreator } from './PromptLabCreator';
+import { PromptLabCard } from './PromptLabCard';
 import ExportDialog from './ExportDialog';
 
-export const SessionCollection: React.FC = () => {
+export const PromptLabCollection: React.FC = () => {
   const navigate = useNavigate();
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [promptLabs, setPromptLabs] = useState<PromptLab[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'created_at' | 'updated_at' | 'name'>('updated_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [exportDialog, setExportDialog] = useState<{ open: boolean; session: Session | null }>({ open: false, session: null });
+  const [exportDialog, setExportDialog] = useState<{ open: boolean; promptLab: PromptLab | null }>({ open: false, promptLab: null });
 
-  const loadSessions = async () => {
+  const loadPromptLabs = async () => {
     try {
       setLoading(true);
-      const response = await sessionService.getAllSessions({
+      const response = await promptLabService.getAllPromptLabs({
         search: searchTerm || undefined,
         sort_by: sortBy,
         order: sortOrder
       });
-      setSessions(response.sessions);
+      setPromptLabs(response.prompt_labs);
       setError(null);
     } catch (err) {
-      setError('Failed to load sessions');
-      console.error('Error loading sessions:', err);
+      setError('Failed to load prompt labs');
+      console.error('Error loading prompt labs:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadSessions();
+    loadPromptLabs();
   }, [searchTerm, sortBy, sortOrder]);
 
-  const handleCreateSession = async (sessionData: { name: string; description: string; initial_prompt?: string }) => {
+  const handleCreatePromptLab = async (promptLabData: { name: string; description: string; initial_prompt?: string }) => {
     try {
-      await sessionService.createSession(sessionData);
+      await promptLabService.createPromptLab(promptLabData);
       setShowCreateForm(false);
-      await loadSessions(); // Reload the session list
+      await loadPromptLabs(); // Reload the prompt lab list
     } catch (err) {
-      console.error('Error creating session:', err);
-      setError('Failed to create session');
+      console.error('Error creating prompt lab:', err);
+      setError('Failed to create prompt lab');
     }
   };
 
-  const handleDeleteSession = async (sessionId: string) => {
-    if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
+  const handleDeletePromptLab = async (promptLabId: string) => {
+    if (!confirm('Are you sure you want to delete this prompt lab? This action cannot be undone.')) {
       return;
     }
 
     try {
-      await sessionService.deleteSession(sessionId);
-      await loadSessions(); // Reload the session list
+      await promptLabService.deletePromptLab(promptLabId);
+      await loadPromptLabs(); // Reload the prompt lab list
     } catch (err) {
-      console.error('Error deleting session:', err);
-      setError('Failed to delete session');
+      console.error('Error deleting prompt lab:', err);
+      setError('Failed to delete prompt lab');
     }
   };
 
-  const handleDuplicateSession = async (sessionId: string) => {
+  const handleDuplicatePromptLab = async (promptLabId: string) => {
     try {
-      const originalSession = sessions.find(s => s.id === sessionId);
-      if (!originalSession) return;
+      const originalPromptLab = promptLabs.find(s => s.id === promptLabId);
+      if (!originalPromptLab) return;
 
-      await sessionService.duplicateSession(sessionId, {
-        name: `${originalSession.name} (Copy)`,
-        description: originalSession.description,
+      await promptLabService.duplicatePromptLab(promptLabId, {
+        name: `${originalPromptLab.name} (Copy)`,
+        description: originalPromptLab.description,
         copy_emails: false // Don't copy emails by default
       });
-      await loadSessions(); // Reload the session list
+      await loadPromptLabs(); // Reload the prompt lab list
     } catch (err) {
-      console.error('Error duplicating session:', err);
-      setError('Failed to duplicate session');
+      console.error('Error duplicating prompt lab:', err);
+      setError('Failed to duplicate prompt lab');
     }
   };
 
-  const handleExportSession = (sessionId: string) => {
-    const session = sessions.find(s => s.id === sessionId);
-    if (session) {
-      setExportDialog({ open: true, session });
+  const handleExportPromptLab = (promptLabId: string) => {
+    const promptLab = promptLabs.find(s => s.id === promptLabId);
+    if (promptLab) {
+      setExportDialog({ open: true, promptLab });
     }
   };
 
-  const filteredSessions = sessions.filter(session =>
-    session.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    session.description.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredPromptLabs = promptLabs.filter(promptLab =>
+    promptLab.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    promptLab.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (loading) {
@@ -99,7 +99,7 @@ export const SessionCollection: React.FC = () => {
         <div className="flex items-center justify-center h-64">
           <div className="flex items-center gap-3">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-            <span className="text-gray-600 text-lg">Loading sessions...</span>
+            <span className="text-gray-600 text-lg">Loading prompt labs...</span>
           </div>
         </div>
       </div>
@@ -113,11 +113,11 @@ export const SessionCollection: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h2 className="text-2xl font-bold text-gray-900">
-              Learning Sessions
+              Prompt Labs
             </h2>
             <div className="w-px h-6 bg-gray-300"></div>
             <p className="text-gray-600">
-              Create and manage your prompt evolution sessions
+              Create and manage your prompt evolution labs
             </p>
           </div>
           <button 
@@ -127,7 +127,7 @@ export const SessionCollection: React.FC = () => {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            New Session
+New Prompt Lab
           </button>
         </div>
       </div>
@@ -158,7 +158,7 @@ export const SessionCollection: React.FC = () => {
               </div>
               <input
                 type="text"
-                placeholder="Search sessions..."
+                placeholder="Search prompt labs..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
@@ -190,19 +190,19 @@ export const SessionCollection: React.FC = () => {
         {/* Stats */}
         <div className="flex gap-8 mt-6 p-4 bg-gray-50 rounded-xl">
           <div className="text-center">
-            <div className="text-2xl font-bold text-purple-600">{sessions.length}</div>
-            <div className="text-sm text-gray-600">Total Sessions</div>
+            <div className="text-2xl font-bold text-purple-600">{promptLabs.length}</div>
+            <div className="text-sm text-gray-600">Total Prompt Labs</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-green-600">{sessions.filter(s => s.is_active).length}</div>
-            <div className="text-sm text-gray-600">Active Sessions</div>
+            <div className="text-2xl font-bold text-green-600">{promptLabs.filter(s => s.is_active).length}</div>
+            <div className="text-sm text-gray-600">Active Prompt Labs</div>
           </div>
         </div>
       </div>
 
       {/* Content */}
       <div className="p-8">
-        {filteredSessions.length === 0 ? (
+        {filteredPromptLabs.length === 0 ? (
           <div className="text-center py-16">
             {searchTerm ? (
               <div className="max-w-md mx-auto">
@@ -211,8 +211,8 @@ export const SessionCollection: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No sessions found</h3>
-                <p className="text-gray-600 mb-4">No sessions match your search criteria.</p>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No prompt labs found</h3>
+                <p className="text-gray-600 mb-4">No prompt labs match your search criteria.</p>
                 <button 
                   onClick={() => setSearchTerm('')}
                   className="btn-secondary"
@@ -227,28 +227,28 @@ export const SessionCollection: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
                 </div>
-                <h3 className="text-2xl font-semibold text-gray-900 mb-2">No sessions yet</h3>
-                <p className="text-gray-600 mb-6">Create your first learning session to get started with prompt evolution.</p>
+                <h3 className="text-2xl font-semibold text-gray-900 mb-2">No prompt labs yet</h3>
+                <p className="text-gray-600 mb-6">Create your first prompt lab to get started with prompt evolution.</p>
                 <button 
                   className="btn-primary"
                   onClick={() => setShowCreateForm(true)}
                 >
-                  Create Your First Session
+                  Create Your First Prompt Lab
                 </button>
               </div>
             )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredSessions.map(session => (
-              <SessionCard
-                key={session.id}
-                session={session}
-                onView={(id) => navigate(`/sessions/${id}`)}
-                onEdit={(id) => navigate(`/sessions/${id}/edit`)}
-                onDelete={handleDeleteSession}
-                onDuplicate={handleDuplicateSession}
-                onExport={handleExportSession}
+            {filteredPromptLabs.map(promptLab => (
+              <PromptLabCard
+                key={promptLab.id}
+                promptLab={promptLab}
+                onView={(id) => navigate(`/prompt-labs/${id}`)}
+                onEdit={(id) => navigate(`/prompt-labs/${id}/edit`)}
+                onDelete={handleDeletePromptLab}
+                onDuplicate={handleDuplicatePromptLab}
+                onExport={handleExportPromptLab}
               />
             ))}
           </div>
@@ -257,17 +257,17 @@ export const SessionCollection: React.FC = () => {
 
       {/* Modals */}
       {showCreateForm && (
-        <SessionCreator
+        <PromptLabCreator
           onCancel={() => setShowCreateForm(false)}
-          onSubmit={handleCreateSession}
+          onSubmit={handleCreatePromptLab}
         />
       )}
       
       <ExportDialog
         isOpen={exportDialog.open}
-        onClose={() => setExportDialog({ open: false, session: null })}
-        exportType="session"
-        session={exportDialog.session || undefined}
+        onClose={() => setExportDialog({ open: false, promptLab: null })}
+        exportType="promptLab"
+        promptLab={exportDialog.promptLab || undefined}
       />
 
       {/* Footer */}

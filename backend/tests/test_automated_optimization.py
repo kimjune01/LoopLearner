@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.utils import timezone
 from datetime import timedelta
 from unittest.mock import patch, MagicMock, call
-from core.models import Session, SystemPrompt, UserFeedback, Email, Draft
+from core.models import PromptLab, SystemPrompt, UserFeedback, Email, Draft
 from app.services.background_scheduler import BackgroundOptimizationScheduler
 from app.services.optimization_orchestrator import OptimizationTrigger
 
@@ -14,14 +14,14 @@ class AutomatedOptimizationTests(TestCase):
     
     def setUp(self):
         """Set up test data."""
-        # Create session with system prompt
-        self.session = Session.objects.create(
-            name="Test Session",
+        # Create prompt lab with system prompt
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="Test Description"
         )
         
         self.system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="You are a helpful assistant.",
             version=1,
             is_active=True
@@ -41,7 +41,7 @@ class AutomatedOptimizationTests(TestCase):
     def create_feedback(self, action="reject", hours_ago=0):
         """Helper to create feedback entries."""
         email = Email.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             subject=f"Test Email",
             body=f"Test body",
             sender="test@example.com",
@@ -173,23 +173,23 @@ class AutomatedOptimizationTests(TestCase):
             self.assertEqual(self.scheduler._optimization_count_today, 1)
     
     def test_multiple_sessions_isolated(self):
-        """Test that optimization only considers feedback from relevant sessions."""
-        # Create another session with its own feedback
-        other_session = Session.objects.create(
-            name="Other Session",
+        """Test that optimization only considers feedback from relevant ."""
+        # Create another prompt lab with its own feedback
+        other_session = PromptLab.objects.create(
+            name="Other PromptLab",
             description="Other Description"
         )
         other_prompt = SystemPrompt.objects.create(
-            session=other_session,
+            prompt_lab=other_session,
             content="Different prompt",
             version=1,
             is_active=True
         )
         
-        # Create negative feedback for other session
+        # Create negative feedback for other 
         for i in range(10):
             email = Email.objects.create(
-                session=other_session,
+                prompt_lab=other_session,
                 subject=f"Other Email {i}",
                 body=f"Other body {i}",
                 sender="other@example.com"
@@ -205,20 +205,20 @@ class AutomatedOptimizationTests(TestCase):
                 reason=f"Other reason {i}"
             )
         
-        # Create insufficient feedback for our session
+        # Create insufficient feedback for our 
         for i in range(2):
             self.create_feedback(action="reject")
         
         with patch.object(self.scheduler, '_execute_optimization') as mock_execute:
-            # Check for our session specifically
-            should_trigger = self.scheduler.check_and_trigger_optimization(session=self.session)
+            # Check for our  specifically
+            should_trigger = self.scheduler.check_and_trigger_optimization(prompt_lab=self.prompt_lab)
             
-            # Should not trigger for our session
+            # Should not trigger for our 
             self.assertFalse(should_trigger)
             mock_execute.assert_not_called()
             
-            # But should trigger for other session
-            should_trigger_other = self.scheduler.check_and_trigger_optimization(session=other_session)
+            # But should trigger for other 
+            should_trigger_other = self.scheduler.check_and_trigger_optimization(prompt_lab=other_session)
             self.assertTrue(should_trigger_other)
     
     @patch('app.services.optimization_orchestrator.OptimizationOrchestrator')
@@ -236,7 +236,7 @@ class AutomatedOptimizationTests(TestCase):
         mock_result = MagicMock()
         mock_result.success = True
         mock_result.new_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Improved prompt",
             version=2,
             is_active=False
@@ -246,37 +246,37 @@ class AutomatedOptimizationTests(TestCase):
         mock_orchestrator.optimize_prompt.return_value = mock_result
         
         # Execute
-        result = self.scheduler._execute_optimization(self.session, feedback_list)
+        result = self.scheduler._execute_optimization(self.prompt_lab, feedback_list)
         
         self.assertTrue(result['success'])
         self.assertEqual(result['new_prompt_version'], 2)
         self.assertEqual(result['improvement_percentage'], 12.5)
         
         # Verify optimization was called
-        mock_orchestrator.optimize_prompt.assert_called_once_with(self.session, feedback_list)
+        mock_orchestrator.optimize_prompt.assert_called_once_with(self.prompt_lab, feedback_list)
     
     def test_scheduled_check_all_sessions(self):
-        """Test scheduled check processes all active sessions."""
-        # Create multiple sessions
-        sessions = []
+        """Test scheduled check processes all active ."""
+        # Create multiple 
+        prompt_labs = []
         for i in range(3):
-            session = Session.objects.create(
+            session = PromptLab.objects.create(
                 name=f"Session {i}",
                 description=f"Description {i}"
             )
             SystemPrompt.objects.create(
-                session=session,
+                prompt_lab=session,
                 content=f"Prompt {i}",
                 version=1,
                 is_active=True
             )
-            sessions.append(session)
+            prompt_labs.append(session)
             
-            # Add triggering feedback to first two sessions
+            # Add triggering feedback to first two 
             if i < 2:
                 for j in range(5):
                     email = Email.objects.create(
-                        session=session,
+                        prompt_lab=session,
                         subject=f"Email {j}",
                         body=f"Body {j}",
                         sender="test@example.com"
@@ -297,29 +297,29 @@ class AutomatedOptimizationTests(TestCase):
             
             results = self.scheduler.check_all_sessions()
             
-            # Should have checked at least our 3 sessions (might be more from other tests)
+            # Should have checked at least our 3  (might be more from other tests)
             self.assertGreaterEqual(len(results), 3)
             
-            # Filter to only our test sessions
-            test_session_ids = [s.id for s in sessions]
-            test_results = [r for r in results if r['session_id'] in test_session_ids]
+            # Filter to only our test prompt labs
+            test_prompt_lab_ids = [s.id for s in prompt_labs]
+            test_results = [r for r in results if r['prompt_lab_id'] in test_prompt_lab_ids]
             
-            # Should have checked all 3 test sessions
+            # Should have checked all 3 test prompt labs
             self.assertEqual(len(test_results), 3)
             
-            # Should have triggered optimization for first 2 sessions
+            # Should have triggered optimization for first 2 
             triggered_count = sum(1 for r in test_results if r['triggered'])
-            # Note: The scheduler processes each session with check_all_sessions()
-            # which calls check_and_trigger_optimization individually for each session
+            # Note: The scheduler processes each  with check_all_sessions()
+            # which calls check_and_trigger_optimization individually for each 
             self.assertEqual(triggered_count, 2)
             
-            # Verify execute was called for the two sessions with feedback
-            # Filter calls to only our test sessions
-            test_session_names = [s.name for s in sessions[:2]]  # First two have feedback
-            executed_sessions = []
+            # Verify execute was called for the two  with feedback
+            # Filter calls to only our test 
+            test_prompt_lab_names = [s.name for s in prompt_labs[:2]]  # First two have feedback
+            executed_prompt_labs = []
             for call in mock_execute.call_args_list:
-                session_arg = call[0][0]  # First positional argument is session
-                if session_arg.name in test_session_names:
-                    executed_sessions.append(session_arg.name)
+                session_arg = call[0][0]  # First positional argument is 
+                if session_arg.name in test_prompt_lab_names:
+                    executed_prompt_labs.append(session_arg.name)
             
-            self.assertEqual(len(executed_sessions), 2)
+            self.assertEqual(len(executed_prompt_labs), 2)

@@ -5,7 +5,7 @@ Ensures compute spend limits and progressive thresholds work correctly
 import json
 from django.test import TestCase, Client
 from django.urls import reverse
-from core.models import Session, SystemPrompt
+from core.models import PromptLab, SystemPrompt
 
 
 class TestComputeOptimizationControls(TestCase):
@@ -13,13 +13,13 @@ class TestComputeOptimizationControls(TestCase):
     
     def setUp(self):
         """Set up test data"""
-        self.session = Session.objects.create(
-            name="Compute Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Compute Test PromptLab",
             description="Session for testing compute controls"
         )
         
         self.prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Test prompt",
             version=1,
             is_active=True
@@ -31,12 +31,12 @@ class TestComputeOptimizationControls(TestCase):
         
         detector = ConvergenceDetector()
         
-        # Set session to max iterations
-        self.session.optimization_iterations = detector.MAX_ITERATIONS_HARD_LIMIT
-        self.session.save()
+        # Set  to max iterations
+        self.prompt_lab.optimization_iterations = detector.MAX_ITERATIONS_HARD_LIMIT
+        self.prompt_lab.save()
         
         # Should force convergence
-        assessment = detector.assess_convergence(self.session)
+        assessment = detector.assess_convergence(self.prompt_lab)
         
         self.assertTrue(assessment['converged'])
         self.assertEqual(assessment['factors'].get('hard_limit_reached'), True)
@@ -50,23 +50,23 @@ class TestComputeOptimizationControls(TestCase):
         detector = ConvergenceDetector()
         
         # Test early stage (< 5 iterations)
-        self.session.optimization_iterations = 3
-        threshold_early = detector._get_progressive_threshold(self.session)
+        self.prompt_lab.optimization_iterations = 3
+        threshold_early = detector._get_progressive_threshold(self.prompt_lab)
         self.assertEqual(threshold_early, 0.10)  # 10% threshold
         
         # Test refinement stage (5-10 iterations)
-        self.session.optimization_iterations = 7
-        threshold_refinement = detector._get_progressive_threshold(self.session)
+        self.prompt_lab.optimization_iterations = 7
+        threshold_refinement = detector._get_progressive_threshold(self.prompt_lab)
         self.assertEqual(threshold_refinement, 0.05)  # 5% threshold
         
         # Test optimization stage (10-15 iterations)
-        self.session.optimization_iterations = 12
-        threshold_optimization = detector._get_progressive_threshold(self.session)
+        self.prompt_lab.optimization_iterations = 12
+        threshold_optimization = detector._get_progressive_threshold(self.prompt_lab)
         self.assertEqual(threshold_optimization, 0.02)  # 2% threshold
         
         # Test diminishing returns (15+ iterations)
-        self.session.optimization_iterations = 17
-        threshold_diminishing = detector._get_progressive_threshold(self.session)
+        self.prompt_lab.optimization_iterations = 17
+        threshold_diminishing = detector._get_progressive_threshold(self.prompt_lab)
         self.assertEqual(threshold_diminishing, 0.01)  # 1% threshold
     
     def test_negative_performance_trend_early_exit(self):
@@ -79,7 +79,7 @@ class TestComputeOptimizationControls(TestCase):
         scores = [0.8, 0.7, 0.6]  # Getting worse
         for i, score in enumerate(scores):
             SystemPrompt.objects.create(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 content=f"Test prompt v{i+2}",
                 version=i+2,
                 performance_score=score,
@@ -87,11 +87,11 @@ class TestComputeOptimizationControls(TestCase):
             )
         
         # Should detect negative trend
-        negative_trend = detector._check_negative_performance_trend(self.session)
+        negative_trend = detector._check_negative_performance_trend(self.prompt_lab)
         self.assertTrue(negative_trend)
         
         # Full assessment should recommend stopping
-        assessment = detector.assess_convergence(self.session)
+        assessment = detector.assess_convergence(self.prompt_lab)
         
         self.assertTrue(assessment['converged'])
         self.assertTrue(assessment['factors'].get('negative_trend_detected', False))
@@ -110,12 +110,12 @@ class TestComputeOptimizationControls(TestCase):
         
         detector = ConvergenceDetector()
         
-        # Set up a session approaching soft limit
-        self.session.optimization_iterations = detector.MAX_ITERATIONS_SOFT_LIMIT
-        self.session.total_feedback_collected = 50
-        self.session.save()
+        # Set up a  approaching soft limit
+        self.prompt_lab.optimization_iterations = detector.MAX_ITERATIONS_SOFT_LIMIT
+        self.prompt_lab.total_feedback_collected = 50
+        self.prompt_lab.save()
         
-        assessment = detector.assess_convergence(self.session)
+        assessment = detector.assess_convergence(self.prompt_lab)
         
         # Should have recommendation about approaching limit
         approaching_limit_recs = [
@@ -126,7 +126,7 @@ class TestComputeOptimizationControls(TestCase):
         
         # If no approaching limit recommendation, check for any iteration-related recommendation
         if len(approaching_limit_recs) == 0:
-            # Session might be converged or have other recommendations
+            # PromptLab might be converged or have other recommendations
             self.assertTrue(
                 assessment['converged'] or 
                 any('iteration' in r.get('reason', '').lower() for r in assessment['recommendations'])
@@ -142,7 +142,7 @@ class TestComputeOptimizationControls(TestCase):
         }
         
         savings_recommendations = detector.generate_recommendations(
-            self.session, factors, converged=True
+            self.prompt_lab, factors, converged=True
         )
         
         savings_recs = [
@@ -150,7 +150,7 @@ class TestComputeOptimizationControls(TestCase):
             if r.get('action') == 'compute_savings'
         ]
         
-        if self.session.optimization_iterations < detector.MAX_ITERATIONS_HARD_LIMIT:
+        if self.prompt_lab.optimization_iterations < detector.MAX_ITERATIONS_HARD_LIMIT:
             self.assertGreater(len(savings_recs), 0)
             # Should include dollar amount in reason
             self.assertIn('$', savings_recs[0]['reason'])
@@ -166,7 +166,7 @@ class TestComputeOptimizationControls(TestCase):
         scores = [0.85, 0.75, 0.70]  # Declining trend with 11.7% drop
         for i, score in enumerate(scores):
             SystemPrompt.objects.create(
-                session=self.session,
+                prompt_lab=self.prompt_lab,
                 content=f"Test prompt v{i+2}",
                 version=i+2,
                 performance_score=score,
@@ -174,7 +174,7 @@ class TestComputeOptimizationControls(TestCase):
             )
         
         # Should detect negative trend due to significant drop
-        negative_trend = detector._check_negative_performance_trend(self.session)
+        negative_trend = detector._check_negative_performance_trend(self.prompt_lab)
         
         # The drop from 0.85 to 0.75 is 11.7%, which is > 5%
         # But we need at least 3 scores for the method to work properly

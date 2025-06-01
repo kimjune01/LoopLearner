@@ -61,9 +61,9 @@ def mock_feedback_batch():
         feedback.draft = MagicMock()
         feedback.draft.email = MagicMock()
         feedback.draft.email.scenario_type = 'professional'
-        # Add proper session mock with UUID
+        # Add proper  mock with UUID
         feedback.draft.email.session = MagicMock()
-        feedback.draft.email.session.id = '12345678-1234-5678-9012-123456789012'
+        feedback.draft.email.prompt_lab.id = '12345678-1234-5678-9012-123456789012'
         feedback_list.append(feedback)
     return feedback_list
 

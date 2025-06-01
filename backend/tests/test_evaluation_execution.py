@@ -7,7 +7,7 @@ from rest_framework.test import APITestCase
 from django.contrib.auth.models import User
 from unittest.mock import patch, MagicMock
 from core.models import (
-    Session, SystemPrompt, EvaluationDataset, EvaluationCase, 
+    PromptLab, SystemPrompt, EvaluationDataset, EvaluationCase, 
     EvaluationRun, EvaluationResult
 )
 
@@ -17,14 +17,14 @@ class EvaluationExecutionTests(TestCase):
     
     def setUp(self):
         """Set up test data."""
-        # Create session and prompt
-        self.session = Session.objects.create(
-            name="Test Session",
+        # Create  and prompt
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="Test Description"
         )
         
         self.system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="You are a helpful assistant. Answer the question: {{question}}",
             version=1,
             is_active=True
@@ -32,7 +32,7 @@ class EvaluationExecutionTests(TestCase):
         
         # Create evaluation dataset
         self.dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Test Dataset",
             description="Test evaluation dataset",
             parameters=["question"]
@@ -178,7 +178,7 @@ class EvaluationExecutionTests(TestCase):
         
         # Create a second prompt version
         prompt_v2 = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="You are an expert math tutor. Solve: {{question}}",
             version=2,
             is_active=False
@@ -214,7 +214,7 @@ class EvaluationExecutionTests(TestCase):
         
         # Create a second dataset
         dataset2 = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Math Dataset 2",
             description="More math problems",
             parameters=["question"]
@@ -255,20 +255,20 @@ class EvaluationExecutionAPITests(APITestCase):
         self.client.force_authenticate(user=self.user)
         
         # Create test data
-        self.session = Session.objects.create(
-            name="Test Session",
+        self.prompt_lab = PromptLab.objects.create(
+            name="Test PromptLab",
             description="Test Description"
         )
         
         self.system_prompt = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Answer: {{question}}",
             version=1,
             is_active=True
         )
         
         self.dataset = EvaluationDataset.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             name="Test Dataset",
             parameters=["question"]
         )
@@ -350,7 +350,7 @@ class EvaluationExecutionAPITests(APITestCase):
         """Test API endpoint for comparing multiple prompts."""
         # Create second prompt
         prompt2 = SystemPrompt.objects.create(
-            session=self.session,
+            prompt_lab=self.prompt_lab,
             content="Respond to: {{question}}",
             version=2,
             is_active=False
