@@ -127,12 +127,13 @@ export const evaluationService = {
   },
 
   // Case generation
-  async generateCases(datasetId: number, template: string, count: number = 5, usePromptLabPrompt: boolean = false, generateOutputVariations: boolean = false, variationsCount: number = 3, persistImmediately: boolean = false): Promise<{ previews: CasePreview[], persisted_count?: number, generation_method: string, prompt_lab_name?: string, prompt_content?: string, prompt_parameters?: string[], supports_variations?: boolean }> {
+  async generateCases(datasetId: number, template: string, count: number = 5, usePromptLabPrompt: boolean = false, generateOutputVariations: boolean = false, variationsCount: number = 3, persistImmediately: boolean = false, maxTokens: number = 500): Promise<{ previews: CasePreview[], persisted_count?: number, generation_method: string, prompt_lab_name?: string, prompt_content?: string, prompt_parameters?: string[], supports_variations?: boolean }> {
     const requestBody: any = { 
       template, 
       count, 
       use_prompt_lab_prompt: usePromptLabPrompt,
-      persist_immediately: persistImmediately
+      persist_immediately: persistImmediately,
+      max_tokens: maxTokens
     };
     
     if (generateOutputVariations) {
@@ -325,5 +326,99 @@ export const evaluationService = {
     }
     const data = await response.json();
     return data.results || [];
+  },
+
+  async getDetailedEvaluationResults(runId: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/evaluations/runs/${runId}/results/`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch detailed evaluation results');
+    }
+    return response.json();
+  },
+
+  async deleteEvaluationRun(runId: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/evaluations/runs/${runId}/`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to delete evaluation run');
+    }
+  },
+
+  async deleteAllEvaluationRuns(datasetId: number): Promise<{ deleted_count: number }> {
+    const response = await fetch(`${EVALUATION_API_URL}/datasets/${datasetId}/runs/delete-all/`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to delete all evaluation runs');
+    }
+    return response.json();
+  },
+
+  // Draft case operations
+  async getDrafts(datasetId: number): Promise<any[]> {
+    const response = await fetch(`${EVALUATION_API_URL}/datasets/${datasetId}/drafts/`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch draft cases');
+    }
+    const data = await response.json();
+    return data.drafts || [];
+  },
+
+  async promoteDraft(datasetId: number, draftId: number, selectedOutputIndex?: number, customOutput?: string): Promise<any> {
+    const requestBody: any = {};
+    if (selectedOutputIndex !== undefined) {
+      requestBody.selected_output_index = selectedOutputIndex;
+    }
+    if (customOutput) {
+      requestBody.custom_output = customOutput;
+    }
+
+    const response = await fetch(`${EVALUATION_API_URL}/datasets/${datasetId}/drafts/${draftId}/promote/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to promote draft case');
+    }
+    return response.json();
+  },
+
+  async discardDraft(datasetId: number, draftId: number, reason?: string): Promise<void> {
+    const response = await fetch(`${EVALUATION_API_URL}/datasets/${datasetId}/drafts/${draftId}/discard/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ reason: reason || 'Not suitable' }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to discard draft case');
+    }
+  },
+
+  async getDraftStatus(): Promise<any> {
+    const response = await fetch(`${EVALUATION_API_URL}/drafts/status/`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch draft status');
+    }
+    return response.json();
+  },
+
+  async triggerDraftGeneration(datasetId: number): Promise<any> {
+    const response = await fetch(`${EVALUATION_API_URL}/datasets/${datasetId}/drafts/generate/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to trigger draft generation');
+    }
+    return response.json();
   },
 };

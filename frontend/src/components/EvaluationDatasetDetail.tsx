@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { evaluationService } from '../services/evaluationService';
+import { promptLabService } from '../services/promptLabService';
 import CaseWithOutputSelection from './CaseWithOutputSelection';
 import type { EvaluationDataset, EvaluationCase, CasePreview } from '../types/evaluation';
 
@@ -17,7 +18,7 @@ const EvaluationDatasetDetail: React.FC = () => {
   const [cases, setCases] = useState<EvaluationCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'cases' | 'quick-generate' | 'curated-generation'>('cases');
+  const [activeTab, setActiveTab] = useState<'cases' | 'auto-synthesize' | 'curated-generation' | 'import-data'>('cases');
   const [isEditingName, setIsEditingName] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [editedName, setEditedName] = useState('');
@@ -182,13 +183,19 @@ const EvaluationDatasetDetail: React.FC = () => {
         {/* Header */}
         <div className="mb-8">
           <button
-            onClick={() => navigate('/evaluation/datasets')}
+            onClick={() => {
+              if (dataset?.prompt_lab_id) {
+                navigate(`/prompt-labs/${dataset.prompt_lab_id}?tab=evaluations`);
+              } else {
+                navigate('/evaluation/datasets');
+              }
+            }}
             className="mb-4 text-sm text-gray-600 hover:text-gray-900 flex items-center"
           >
             <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Back to Datasets
+            {dataset?.prompt_lab_id ? 'Back to Prompt Lab' : 'Back to Datasets'}
           </button>
           
           <div className="flex items-start justify-between">
@@ -295,22 +302,6 @@ const EvaluationDatasetDetail: React.FC = () => {
                 )}
               </div>
               
-              {/* Prompt Lab Link */}
-              {dataset.prompt_lab_id && (
-                <div className="mt-3 flex items-center space-x-2">
-                  <svg className="h-4 w-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                  </svg>
-                  <span className="text-sm text-gray-600">Associated with prompt lab:</span>
-                  <button
-                    onClick={() => navigate(`/prompt-labs/${dataset.prompt_lab_id}`)}
-                    className="text-sm font-medium text-purple-600 hover:text-purple-800 hover:underline"
-                  >
-                    View Prompt Lab →
-                  </button>
-                </div>
-              )}
-              
               {/* Parameters */}
               {dataset.parameters && dataset.parameters.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -328,6 +319,12 @@ const EvaluationDatasetDetail: React.FC = () => {
             </div>
             
             <div className="flex space-x-3">
+              <button
+                onClick={() => navigate(`/evaluation/datasets/${datasetId}/runs`)}
+                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                View Run History
+              </button>
               <button
                 onClick={() => navigate(`/evaluation/datasets/${datasetId}/run`)}
                 className="btn-primary"
@@ -359,14 +356,14 @@ const EvaluationDatasetDetail: React.FC = () => {
               Cases ({cases.length})
             </button>
             <button
-              onClick={() => setActiveTab('quick-generate')}
+              onClick={() => setActiveTab('auto-synthesize')}
               className={`${
-                activeTab === 'quick-generate'
+                activeTab === 'auto-synthesize'
                   ? 'border-purple-500 text-purple-600'
                   : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
               } whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium`}
             >
-              Quick Generate
+              Auto Synthesize
             </button>
             <button
               onClick={() => setActiveTab('curated-generation')}
@@ -377,6 +374,16 @@ const EvaluationDatasetDetail: React.FC = () => {
               } whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium`}
             >
               Curated Generation
+            </button>
+            <button
+              onClick={() => setActiveTab('import-data')}
+              className={`${
+                activeTab === 'import-data'
+                  ? 'border-purple-500 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+              } whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium`}
+            >
+              Import Data
             </button>
           </nav>
         </div>
@@ -395,7 +402,7 @@ const EvaluationDatasetDetail: React.FC = () => {
           />
         )}
 
-        {activeTab === 'quick-generate' && (
+        {activeTab === 'auto-synthesize' && (
           <QuickGenerateTab
             datasetId={Number(datasetId)}
             dataset={dataset}
@@ -410,6 +417,15 @@ const EvaluationDatasetDetail: React.FC = () => {
             datasetId={Number(datasetId)}
             dataset={dataset}
             parameters={dataset.parameters}
+            onCasesAdded={loadCases}
+            setActiveTab={setActiveTab}
+          />
+        )}
+
+        {activeTab === 'import-data' && (
+          <ImportDataTab
+            datasetId={Number(datasetId)}
+            dataset={dataset}
             onCasesAdded={loadCases}
             setActiveTab={setActiveTab}
           />
@@ -446,32 +462,16 @@ const CasesTab: React.FC<CasesTabProps> = ({
   return (
     <div>
       {/* Actions Bar */}
-      {cases.length > 0 && (
+      {cases.length > 0 && selectedCases.size > 0 && (
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={selectedCases.size === cases.length}
-                onChange={onSelectAll}
-                className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-              />
-              <span className="ml-2 text-sm text-gray-700">Select all</span>
-            </label>
-            
-            {selectedCases.size > 0 && (
-              <button
-                onClick={onDeleteSelected}
-                className="text-sm text-red-600 hover:text-red-800"
-              >
-                Delete {selectedCases.size} selected
-              </button>
-            )}
+            <button
+              onClick={onDeleteSelected}
+              className="text-sm text-red-600 hover:text-red-800"
+            >
+              Delete {selectedCases.size} selected
+            </button>
           </div>
-          
-          <p className="text-sm text-gray-500">
-            {cases.length} {cases.length === 1 ? 'case' : 'cases'}
-          </p>
         </div>
       )}
 
@@ -499,10 +499,15 @@ const CasesTab: React.FC<CasesTabProps> = ({
                   {editingCase === testCase.id ? (
                     <CaseEditor
                       testCase={testCase}
-                      onSave={async () => {
-                        // TODO: Implement save logic with updates
-                        setEditingCase(null);
-                        onCaseUpdated();
+                      onSave={async (updates: Partial<EvaluationCase>) => {
+                        try {
+                          await evaluationService.updateCase(dataset.id, testCase.id, updates);
+                          setEditingCase(null);
+                          onCaseUpdated();
+                        } catch (err) {
+                          console.error('Error saving case:', err);
+                          throw err;
+                        }
                       }}
                       onCancel={() => setEditingCase(null)}
                     />
@@ -516,9 +521,9 @@ const CasesTab: React.FC<CasesTabProps> = ({
                 
                 <div className="ml-4 flex space-x-2">
                   <button
-                    onClick={() => setEditingCase(testCase.id)}
+                    onClick={() => setEditingCase(editingCase === testCase.id ? null : testCase.id)}
                     className="text-gray-400 hover:text-gray-600"
-                    title="Edit case"
+                    title={editingCase === testCase.id ? "Cancel edit" : "Edit case"}
                   >
                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -568,96 +573,81 @@ const PreviewCaseDisplay: React.FC<PreviewCaseDisplayProps> = ({ preview, sessio
       {/* Input Parameters - Main Display */}
       {hasParameters && (
         <div className="mb-4">
-          <h4 className="text-sm font-medium text-gray-900 mb-3">Input Parameters</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Object.entries(parameters).map(([key, value]) => (
-              <div
-                key={key}
-                className="bg-blue-50 border border-blue-200 rounded-lg p-3"
-              >
-                <span className="text-xs font-medium text-blue-800 uppercase tracking-wider block mb-1">
-                  {key.replace(/_/g, ' ')}
-                </span>
-                <p className="text-sm text-blue-900 font-medium">{String(value)}</p>
-              </div>
-            ))}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+            <table className="min-w-full">
+              <tbody className="bg-white divide-y divide-gray-200">
+                {Object.entries(parameters).map(([key, value]) => (
+                  <tr key={key} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                      {key.replace(/_/g, ' ')}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-800">
+                      {String(value)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
       {/* Expected Output */}
       <div className="mb-4">
-        <h4 className="text-sm font-medium text-gray-900 mb-2">Expected Output</h4>
         <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
           <p className="text-sm text-green-900 whitespace-pre-wrap">{outputText}</p>
         </div>
       </div>
 
-      {/* View Full Prompt Button */}
+      {/* View Full Prompt Toggle */}
       <div className="flex justify-end">
         <button
-          onClick={() => setShowFullPrompt(true)}
+          onClick={() => setShowFullPrompt(!showFullPrompt)}
           className="text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 px-3 py-1 rounded-md transition-colors"
         >
-          View Full Prompt
+          {showFullPrompt ? 'Hide Full Prompt' : 'View Full Prompt'}
         </button>
       </div>
 
-      {/* Full Prompt Modal */}
+      {/* Full Prompt Content */}
       {showFullPrompt && (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50" onClick={() => setShowFullPrompt(false)}>
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium text-gray-900">Full Prompt with Parameter Substitutions</h3>
-                <button
-                  onClick={() => setShowFullPrompt(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+        <div className="mt-4 space-y-4 border-t border-gray-200 pt-4">
+          {sessionContext.generation_method === 'prompt_lab_prompt' && sessionContext.prompt_lab_name && (
+            <div className="mb-4">
+              <span className="text-sm text-purple-600 font-medium">From Prompt Lab: {sessionContext.prompt_lab_name}</span>
             </div>
-            
-            <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {sessionContext.generation_method === 'prompt_lab_prompt' && sessionContext.prompt_lab_name && (
-                <div className="mb-4">
-                  <span className="text-sm text-purple-600 font-medium">From Prompt Lab: {sessionContext.prompt_lab_name}</span>
-                </div>
-              )}
-              
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Complete Prompt (With Substitutions)</h4>
-                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">{inputText}</pre>
-                  </div>
-                </div>
-                
-                {(sessionContext.prompt_content || preview.template) && (
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Original Template</h4>
-                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                      <pre className="text-sm text-blue-900 whitespace-pre-wrap font-mono">
-                        {sessionContext.prompt_content || preview.template}
-                      </pre>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
-              <button
-                onClick={() => setShowFullPrompt(false)}
-                className="btn-secondary"
-              >
-                Close
-              </button>
+          )}
+          
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">Complete Prompt (With Substitutions)</h4>
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">{inputText}</pre>
             </div>
           </div>
+          
+          {(sessionContext.prompt_content || preview.template) && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Original Template</h4>
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <pre className="text-sm text-blue-900 whitespace-pre-wrap font-mono">
+                  {sessionContext.prompt_content || preview.template}
+                </pre>
+              </div>
+            </div>
+          )}
+          
+          {/* Show bottom hide button if content is large */}
+          {((inputText && inputText.length > 1024) || 
+            ((sessionContext?.prompt_content || preview?.template) && (sessionContext?.prompt_content || preview?.template)!.length > 1024)) && (
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowFullPrompt(false)}
+                className="text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 px-3 py-1 rounded-md transition-colors"
+              >
+                Hide Full Prompt
+              </button>
+            </div>
+          )}
         </div>
       )}
     </>
@@ -672,104 +662,277 @@ interface CaseDisplayProps {
 
 const CaseDisplay: React.FC<CaseDisplayProps> = ({ testCase, dataset }) => {
   const [showFullPrompt, setShowFullPrompt] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
+  const [activePromptData, setActivePromptData] = useState<{ content: string | null; parameters: string[] | null } | null>(null);
+  const [loadingPrompt, setLoadingPrompt] = useState(false);
+  const [comparison, setComparison] = useState<{ templatesMatch: boolean; parametersMatch: boolean; caseTemplate: string } | null>(null);
 
   // Extract parameters from context or try to parse from input_text
   const parameters = testCase.context || {};
   const hasParameters = Object.keys(parameters).length > 0;
 
+  // Load active prompt for comparison
+  useEffect(() => {
+    if (dataset.prompt_lab_id) {
+      setLoadingPrompt(true);
+      promptLabService.getPromptLab(dataset.prompt_lab_id)
+        .then(data => {
+          if (data.active_prompt?.content) {
+            // Extract parameters from the active prompt
+            const paramMatches = data.active_prompt.content.match(/\{\{(\w+)\}\}/g);
+            const activeParams = paramMatches ? paramMatches.map(match => match.replace(/\{\{|\}\}/g, '')) : [];
+            setActivePromptData({
+              content: data.active_prompt.content,
+              parameters: activeParams
+            });
+          }
+        })
+        .catch(err => console.error('Failed to load active prompt:', err))
+        .finally(() => setLoadingPrompt(false));
+    }
+  }, [dataset.prompt_lab_id]);
+
+  // Initialize comparison when active prompt data is loaded
+  useEffect(() => {
+    if (activePromptData && !comparison) {
+      setComparison(comparePrompts());
+    }
+  }, [activePromptData]);
+
+  // Compare prompts and parameters
+  const comparePrompts = () => {
+    if (!activePromptData?.content || !testCase.input_text) return null;
+
+    // Extract the template from the case by reverse-engineering parameter substitution
+    let caseTemplate = testCase.input_text;
+    
+    // Sort parameters by value length (longest first) to avoid partial replacements
+    const sortedParams = Object.entries(parameters).sort((a, b) => 
+      String(b[1]).length - String(a[1]).length
+    );
+    
+    sortedParams.forEach(([key, value]) => {
+      const valueStr = String(value);
+      
+      // Skip if the value is already a template placeholder that matches this key
+      if (valueStr === `{{${key}}}`) {
+        return;
+      }
+      
+      // Skip if the value contains any template placeholders to avoid double-wrapping
+      if (/\{\{[^}]+\}\}/.test(valueStr)) {
+        return;
+      }
+      
+      // Create a regex that matches the exact value
+      const regex = new RegExp(valueStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+      caseTemplate = caseTemplate.replace(regex, `{{${key}}}`);
+    });
+
+    // Compare base templates
+    const templatesMatch = caseTemplate.trim() === activePromptData.content.trim();
+
+    // Compare parameters (exclude metadata parameters that aren't part of the prompt template)
+    const metadataParams = ['promoted_from_draft', 'selected_variation_index', 'used_custom_output'];
+    const caseParams = Object.keys(parameters)
+      .filter(param => !metadataParams.includes(param))
+      .sort();
+    const activeParams = activePromptData.parameters?.sort() || [];
+    const parametersMatch = JSON.stringify(caseParams) === JSON.stringify(activeParams);
+
+    return { templatesMatch, parametersMatch, caseTemplate };
+  };
+
+  // Generate line-by-line diff
+  const generateDiff = (oldText: string, newText: string) => {
+    const oldLines = oldText.split('\n');
+    const newLines = newText.split('\n');
+    
+    // Simple LCS-based diff algorithm
+    const lcs = (arr1: string[], arr2: string[]): number[][] => {
+      const m = arr1.length;
+      const n = arr2.length;
+      const dp: number[][] = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+      
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          if (arr1[i - 1] === arr2[j - 1]) {
+            dp[i][j] = dp[i - 1][j - 1] + 1;
+          } else {
+            dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+          }
+        }
+      }
+      
+      return dp;
+    };
+    
+    const dp = lcs(oldLines, newLines);
+    let i = oldLines.length;
+    let j = newLines.length;
+    
+    const result: Array<{ type: 'unchanged' | 'added' | 'removed'; content: string }> = [];
+    
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+        result.unshift({ type: 'unchanged', content: oldLines[i - 1] });
+        i--;
+        j--;
+      } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+        result.unshift({ type: 'added', content: newLines[j - 1] });
+        j--;
+      } else if (i > 0) {
+        result.unshift({ type: 'removed', content: oldLines[i - 1] });
+        i--;
+      }
+    }
+    
+    return result;
+  };
+
+  // Handle Show Diff click
+  const handleShowDiff = () => {
+    if (!showDiff) {
+      // Generate fresh comparison when showing diff
+      const newComparison = comparePrompts();
+      setComparison(newComparison);
+    }
+    setShowDiff(!showDiff);
+  };
+
   return (
     <>
+      {/* Prompt Comparison Warning */}
+      {activePromptData && !loadingPrompt && (() => {
+        const comp = comparePrompts();
+        return comp && (!comp.templatesMatch || !comp.parametersMatch);
+      })() && (
+        <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start space-x-2">
+              <svg className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div className="text-sm">
+                <p className="font-medium text-yellow-800">Case uses outdated prompt</p>
+                <ul className="mt-1 text-yellow-700 space-y-0.5">
+                  {comparison && !comparison.templatesMatch && (
+                    <li>• Prompt template has changed</li>
+                  )}
+                  {comparison && !comparison.parametersMatch && (
+                    <li>• Parameters have changed (was: {Object.keys(parameters).filter(param => !['promoted_from_draft', 'selected_variation_index', 'used_custom_output'].includes(param)).join(', ')}, now: {activePromptData.parameters?.join(', ') || 'none'})</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+            {comparison && !comparison.templatesMatch && (
+              <button
+                onClick={handleShowDiff}
+                className="text-sm text-yellow-700 hover:text-yellow-900 hover:bg-yellow-100 px-2 py-1 rounded transition-colors"
+              >
+                {showDiff ? 'Hide Diff' : 'Show Diff'}
+              </button>
+            )}
+          </div>
+          
+          {/* Diff Display */}
+          {showDiff && comparison && !comparison.templatesMatch && (
+            <div className="mt-3 pt-3 border-t border-yellow-200">
+              <div className="bg-white rounded border border-gray-200 overflow-hidden">
+                <div className="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                  <h5 className="text-xs font-medium text-gray-700">Template Differences</h5>
+                </div>
+                <div className="font-mono text-xs">
+                  {generateDiff(comparison.caseTemplate, activePromptData.content || '').map((line, index) => (
+                    <div
+                      key={index}
+                      className={`px-3 py-0.5 ${
+                        line.type === 'removed' 
+                          ? 'bg-red-50 text-red-800' 
+                          : line.type === 'added' 
+                          ? 'bg-green-50 text-green-800' 
+                          : 'bg-white text-gray-700'
+                      }`}
+                    >
+                      <span className={`inline-block w-4 text-center ${
+                        line.type === 'removed' 
+                          ? 'text-red-600' 
+                          : line.type === 'added' 
+                          ? 'text-green-600' 
+                          : 'text-gray-400'
+                      }`}>
+                        {line.type === 'removed' ? '-' : line.type === 'added' ? '+' : ' '}
+                      </span>
+                      <span className="ml-2">{line.content || '\u00A0'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Input Parameters - Main Display */}
       {hasParameters && (
         <div className="mb-4">
-          <h4 className="text-sm font-medium text-gray-900 mb-3">Input Parameters</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Object.entries(parameters).map(([key, value]) => (
-              <div
-                key={key}
-                className="bg-blue-50 border border-blue-200 rounded-lg p-3"
-              >
-                <span className="text-xs font-medium text-blue-800 uppercase tracking-wider block mb-1">
-                  {key.replace(/_/g, ' ')}
-                </span>
-                <p className="text-sm text-blue-900 font-medium">{String(value)}</p>
-              </div>
-            ))}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+            <table className="min-w-full">
+              <tbody className="bg-white divide-y divide-gray-200">
+                {Object.entries(parameters).map(([key, value]) => (
+                  <tr key={key} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                      {key.replace(/_/g, ' ')}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-800">
+                      {String(value)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
       {/* Expected Output */}
       <div className="mb-4">
-        <h4 className="text-sm font-medium text-gray-900 mb-2">Expected Output</h4>
         <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
           <p className="text-sm text-green-900 whitespace-pre-wrap">{testCase.expected_output}</p>
         </div>
       </div>
 
-      {/* View Full Prompt Button */}
+      {/* View Full Prompt Toggle */}
       <div className="flex justify-end">
         <button
-          onClick={() => setShowFullPrompt(true)}
+          onClick={() => setShowFullPrompt(!showFullPrompt)}
           className="text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 px-3 py-1 rounded-md transition-colors"
         >
-          View Full Prompt
+          {showFullPrompt ? 'Hide Full Prompt' : 'View Full Prompt'}
         </button>
       </div>
 
-      {/* Full Prompt Modal */}
+      {/* Full Prompt Content */}
       {showFullPrompt && (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50" onClick={() => setShowFullPrompt(false)}>
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium text-gray-900">Full Prompt with Parameter Substitutions</h3>
-                <button
-                  onClick={() => setShowFullPrompt(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            
-            <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-120px)]">
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Complete Prompt</h4>
-                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">{testCase.input_text}</pre>
-                  </div>
-                </div>
-                
-                {dataset.prompt_lab_id && (
-                  <div className="flex items-center space-x-2 text-sm">
-                    <span className="text-gray-600">From prompt lab:</span>
-                    <button
-                      onClick={() => {
-                        setShowFullPrompt(false);
-                        window.location.href = `/prompt-labs/${dataset.prompt_lab_id}`;
-                      }}
-                      className="text-purple-600 hover:text-purple-800 hover:underline font-medium"
-                    >
-                      View Prompt Lab →
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
-              <button
-                onClick={() => setShowFullPrompt(false)}
-                className="btn-secondary"
-              >
-                Close
-              </button>
+        <div className="mt-4 space-y-4 border-t border-gray-200 pt-4">
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">Complete Prompt</h4>
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">{testCase.input_text}</pre>
             </div>
           </div>
+          
+          {/* Show bottom hide button if content is large */}
+          {testCase.input_text && testCase.input_text.length > 1024 && (
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowFullPrompt(false)}
+                className="text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 px-3 py-1 rounded-md transition-colors"
+              >
+                Hide Full Prompt
+              </button>
+            </div>
+          )}
         </div>
       )}
     </>
@@ -785,17 +948,25 @@ interface CaseEditorProps {
 
 const CaseEditor: React.FC<CaseEditorProps> = ({ testCase, onSave, onCancel }) => {
   const [formData, setFormData] = useState({
-    input_text: testCase.input_text,
+    parameters: testCase.context || {},
     expected_output: testCase.expected_output,
-    context: JSON.stringify(testCase.context || {}, null, 2),
   });
+
+  const handleParameterChange = (key: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      parameters: {
+        ...prev.parameters,
+        [key]: value
+      }
+    }));
+  };
 
   const handleSubmit = async () => {
     try {
       await onSave({
-        input_text: formData.input_text,
         expected_output: formData.expected_output,
-        context: JSON.parse(formData.context),
+        context: formData.parameters,
       });
     } catch (err) {
       console.error('Error saving case:', err);
@@ -803,34 +974,66 @@ const CaseEditor: React.FC<CaseEditorProps> = ({ testCase, onSave, onCancel }) =
   };
 
   return (
-    <div className="space-y-3">
-      <div>
-        <label className="block text-sm font-medium text-gray-700">Input</label>
-        <textarea
-          value={formData.input_text}
-          onChange={(e) => setFormData({ ...formData, input_text: e.target.value })}
-          rows={3}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
-        />
-      </div>
+    <div className="space-y-4">
+      {/* Individual Parameter Fields */}
+      {Object.entries(formData.parameters).map(([key, value]) => (
+        <div key={key}>
+          <label className="block text-sm font-medium text-purple-700 mb-1 uppercase tracking-wider text-xs">
+            {key.replace(/_/g, ' ')}
+          </label>
+          <textarea
+            ref={(textarea) => {
+              if (textarea) {
+                setTimeout(() => {
+                  textarea.style.height = 'auto';
+                  textarea.style.height = Math.min(textarea.scrollHeight, window.innerHeight) + 'px';
+                }, 0);
+              }
+            }}
+            value={String(value)}
+            onChange={(e) => handleParameterChange(key, e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 resize-none overflow-hidden"
+            style={{
+              height: 'auto',
+              minHeight: '2.5rem',
+              maxHeight: '100vh'
+            }}
+            onInput={(e) => {
+              const target = e.target as HTMLTextAreaElement;
+              target.style.height = 'auto';
+              target.style.height = Math.min(target.scrollHeight, window.innerHeight) + 'px';
+            }}
+            placeholder={`Enter ${key.replace(/_/g, ' ')}`}
+          />
+        </div>
+      ))}
       
-      <div>
-        <label className="block text-sm font-medium text-gray-700">Expected Output</label>
+      {/* Expected Output */}
+      <div className="mt-8">
+        <div className="border-t-2 border-gray-300 mb-4"></div>
         <textarea
+          ref={(textarea) => {
+            if (textarea) {
+              setTimeout(() => {
+                textarea.style.height = 'auto';
+                textarea.style.height = Math.min(textarea.scrollHeight, window.innerHeight) + 'px';
+              }, 0);
+            }
+          }}
           value={formData.expected_output}
           onChange={(e) => setFormData({ ...formData, expected_output: e.target.value })}
-          rows={3}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
-        />
-      </div>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700">Context (JSON)</label>
-        <textarea
-          value={formData.context}
-          onChange={(e) => setFormData({ ...formData, context: e.target.value })}
-          rows={3}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 resize-none overflow-hidden"
+          style={{
+            height: 'auto',
+            minHeight: '3rem',
+            maxHeight: '100vh'
+          }}
+          onInput={(e) => {
+            const target = e.target as HTMLTextAreaElement;
+            target.style.height = 'auto';
+            target.style.height = Math.min(target.scrollHeight, window.innerHeight) + 'px';
+          }}
+          placeholder="Enter expected output"
         />
       </div>
       
@@ -858,7 +1061,7 @@ interface GenerateCasesTabProps {
   dataset: EvaluationDataset;
   parameters: string[];
   onCasesAdded: () => void;
-  setActiveTab: (tab: 'cases' | 'quick-generate' | 'curated-generation') => void;
+  setActiveTab: (tab: 'cases' | 'auto-synthesize' | 'curated-generation' | 'import-data') => void;
 }
 
 const GenerateCasesTab: React.FC<GenerateCasesTabProps> = ({ datasetId, dataset, parameters, onCasesAdded, setActiveTab }) => {
@@ -872,6 +1075,7 @@ const GenerateCasesTab: React.FC<GenerateCasesTabProps> = ({ datasetId, dataset,
   const [generateOutputVariations, setGenerateOutputVariations] = useState(false);
   const [variationsCount, setVariationsCount] = useState(3);
   const [persistImmediately, setPersistImmediately] = useState(true);
+  const [maxTokens, setMaxTokens] = useState(500);
   const [casesWithVariations, setCasesWithVariations] = useState<Map<string, any>>(new Map());
   const [sessionContext, setSessionContext] = useState<{
     prompt_lab_name?: string;
@@ -897,7 +1101,8 @@ const GenerateCasesTab: React.FC<GenerateCasesTabProps> = ({ datasetId, dataset,
         useSessionPrompt, 
         generateOutputVariations, 
         variationsCount,
-        persistImmediately
+        persistImmediately,
+        maxTokens
       );
       setPreviews(result.previews);
       
@@ -1119,6 +1324,27 @@ const GenerateCasesTab: React.FC<GenerateCasesTabProps> = ({ datasetId, dataset,
           {[1, 5, 10, 20, 50].map((n) => (
             <option key={n} value={n}>{n}</option>
           ))}
+        </select>
+      </div>
+
+      {/* Max Tokens Selector */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700">
+          Max Tokens for Generated Outputs
+        </label>
+        <p className="mt-1 text-sm text-gray-500">
+          Controls the maximum length of AI-generated expected outputs
+        </p>
+        <select
+          value={maxTokens}
+          onChange={(e) => setMaxTokens(Number(e.target.value))}
+          className="mt-1 block w-40 rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
+        >
+          <option value={200}>200 tokens (short)</option>
+          <option value={350}>350 tokens (medium)</option>
+          <option value={500}>500 tokens (long)</option>
+          <option value={750}>750 tokens (detailed)</option>
+          <option value={1000}>1000 tokens (comprehensive)</option>
         </select>
       </div>
 
@@ -1388,13 +1614,14 @@ const GenerateCasesTab: React.FC<GenerateCasesTabProps> = ({ datasetId, dataset,
   );
 };
 
-// Quick Generate Tab Component - Machine-only generation with immediate persistence
+// Auto Synthesize Tab Component - Machine-only generation with immediate persistence
 const QuickGenerateTab: React.FC<GenerateCasesTabProps> = ({ datasetId, dataset, parameters, onCasesAdded, setActiveTab }) => {
   const [template, setTemplate] = useState('');
   const [count, setCount] = useState(5);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [useSessionPrompt, setUseSessionPrompt] = useState(true);
+  const [maxTokens, setMaxTokens] = useState(500);
   const [sessionContext, setSessionContext] = useState<{
     prompt_lab_name?: string;
     prompt_content?: string;
@@ -1416,9 +1643,10 @@ const QuickGenerateTab: React.FC<GenerateCasesTabProps> = ({ datasetId, dataset,
         template, 
         count, 
         useSessionPrompt, 
-        false, // No output variations for quick generate
+        false, // No output variations for auto synthesize
         3,
-        true // Always persist immediately for quick generate
+        true, // Always persist immediately for auto synthesize
+        maxTokens
       );
       
       // Cases were immediately persisted
@@ -1568,6 +1796,27 @@ const QuickGenerateTab: React.FC<GenerateCasesTabProps> = ({ datasetId, dataset,
         </select>
       </div>
 
+      {/* Max Tokens Selector */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700">
+          Max Tokens for Generated Outputs
+        </label>
+        <p className="mt-1 text-sm text-gray-500">
+          Controls the maximum length of AI-generated expected outputs
+        </p>
+        <select
+          value={maxTokens}
+          onChange={(e) => setMaxTokens(Number(e.target.value))}
+          className="mt-1 block w-40 rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
+        >
+          <option value={200}>200 tokens (short)</option>
+          <option value={350}>350 tokens (medium)</option>
+          <option value={500}>500 tokens (long)</option>
+          <option value={750}>750 tokens (detailed)</option>
+          <option value={1000}>1000 tokens (comprehensive)</option>
+        </select>
+      </div>
+
       {/* Generate Button */}
       <div>
         <button
@@ -1612,108 +1861,97 @@ const QuickGenerateTab: React.FC<GenerateCasesTabProps> = ({ datasetId, dataset,
   );
 };
 
-// Curated Generation Tab Component - Human-in-the-loop generation with output variations
+// Curated Generation Tab Component - One-at-a-time draft curation
 const CuratedGenerationTab: React.FC<GenerateCasesTabProps> = ({ datasetId, dataset, parameters, onCasesAdded, setActiveTab }) => {
-  // This is essentially the original GenerateCasesTab with variations always enabled and persistence never immediate
-  const [template, setTemplate] = useState('');
-  const [count, setCount] = useState(5);
-  const [previews, setPreviews] = useState<CasePreview[]>([]);
-  const [selectedPreviews, setSelectedPreviews] = useState<Set<string>>(new Set());
-  const [generating, setGenerating] = useState(false);
+  const [drafts, setDrafts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [useSessionPrompt, setUseSessionPrompt] = useState(true);
-  const [variationsCount, setVariationsCount] = useState(3);
-  const [casesWithVariations, setCasesWithVariations] = useState<Map<string, any>>(new Map());
-  const [sessionContext, setSessionContext] = useState<{
-    prompt_lab_name?: string;
-    prompt_content?: string;
-    prompt_parameters?: string[];
-    generation_method?: string;
-    supports_variations?: boolean;
-  }>({});
+  const [curating, setCurating] = useState(false);
+  const [triggeringGeneration, setTriggeringGeneration] = useState(false);
 
-  const handleGenerate = async () => {
-    if (!useSessionPrompt && !template.trim()) {
-      setError('Please enter a template or enable session prompt generation');
-      return;
-    }
+  useEffect(() => {
+    loadDrafts();
+  }, [datasetId]);
 
+  const loadDrafts = async () => {
     try {
-      setGenerating(true);
+      setLoading(true);
+      const data = await evaluationService.getDrafts(datasetId);
+      setDrafts(data);
       setError(null);
-      const result = await evaluationService.generateCases(
-        datasetId, 
-        template, 
-        count, 
-        useSessionPrompt, 
-        true, // Always enable output variations for curated generation
-        variationsCount,
-        false // Never persist immediately for curated generation
-      );
-      setPreviews(result.previews);
       
-      // Initialize cases with variations
-      const variationsMap = new Map();
-      result.previews.forEach(preview => {
-        if (preview.output_variations && preview.output_variations.length > 0) {
-          variationsMap.set(preview.preview_id, {
-            ...preview,
-            selected_output_index: null,
-            custom_output: null
-          });
-        }
-      });
-      setCasesWithVariations(variationsMap);
-      setSelectedPreviews(new Set()); // Don't auto-select when variations are available
+      // If no drafts are ready and none are generating, trigger generation
+      const readyDrafts = data.filter(draft => draft.status === 'ready');
+      const generatingDrafts = data.filter(draft => draft.status === 'generating');
       
-      setSessionContext({
-        prompt_lab_name: result.prompt_lab_name || (result as any).session_name,
-        prompt_content: result.prompt_content,
-        prompt_parameters: result.prompt_parameters,
-        generation_method: result.generation_method,
-        supports_variations: result.supports_variations
-      });
+      if (readyDrafts.length === 0 && generatingDrafts.length === 0) {
+        // Automatically trigger generation when no drafts exist
+        triggerDraftGeneration();
+      }
     } catch (err) {
-      setError('Failed to generate cases');
-      console.error('Error generating cases:', err);
+      setError('Failed to load draft cases');
+      console.error('Error loading drafts:', err);
     } finally {
-      setGenerating(false);
+      setLoading(false);
     }
   };
 
-  const handleAddSelected = async () => {
-    // Handle cases with output variations
-    const validCases = Array.from(casesWithVariations.values()).filter(caseData => {
-      return (caseData.selected_output_index !== null) || 
-             (caseData.custom_output && caseData.custom_output.trim() !== '');
-    });
-    
-    if (validCases.length === 0) {
-      setError('Please select outputs for at least one case');
-      return;
-    }
-
+  const triggerDraftGeneration = async () => {
     try {
-      await evaluationService.addSelectedCasesWithVariations(datasetId, validCases);
-      onCasesAdded();
-      setPreviews([]);
-      setCasesWithVariations(new Map());
-      setSelectedPreviews(new Set());
-      setTemplate('');
-      setActiveTab('cases'); // Switch to cases tab after adding
-    } catch (err) {
-      setError('Failed to add cases with variations');
-      console.error('Error adding cases with variations:', err);
+      setTriggeringGeneration(true);
+      await evaluationService.triggerDraftGeneration(datasetId);
+      // Reload drafts after triggering generation
+      setTimeout(() => loadDrafts(), 1500); // Small delay to allow backend to process
+    } catch (triggerErr) {
+      console.error('Error triggering draft generation:', triggerErr);
+      setError('Failed to trigger draft generation. Please try again.');
+    } finally {
+      setTriggeringGeneration(false);
     }
   };
 
-  const handleCaseUpdate = (updatedCase: any) => {
-    setCasesWithVariations(prev => {
-      const newMap = new Map(prev);
-      newMap.set(updatedCase.preview_id, updatedCase);
-      return newMap;
-    });
+  const handlePromoteDraft = async (draftId: number, selectedOutputIndex?: number, customOutput?: string) => {
+    try {
+      setCurating(true);
+      await evaluationService.promoteDraft(datasetId, draftId, selectedOutputIndex, customOutput);
+      onCasesAdded(); // Refresh the cases tab
+      await loadDrafts(); // Refresh drafts (should trigger background generation of new drafts)
+      setError(null);
+    } catch (err) {
+      setError('Failed to promote draft case');
+      console.error('Error promoting draft:', err);
+    } finally {
+      setCurating(false);
+    }
   };
+
+  const handleDiscardDraft = async (draftId: number, reason?: string) => {
+    try {
+      setCurating(true);
+      await evaluationService.discardDraft(datasetId, draftId, reason);
+      await loadDrafts(); // Refresh drafts (should trigger background generation of new drafts)
+      setError(null);
+    } catch (err) {
+      setError('Failed to discard draft case');
+      console.error('Error discarding draft:', err);
+    } finally {
+      setCurating(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+          <span className="ml-3 text-gray-600">Loading draft cases...</span>
+        </div>
+      </div>
+    );
+  }
+
+  const readyDrafts = drafts.filter(draft => draft.status === 'ready');
+  const generatingDrafts = drafts.filter(draft => draft.status === 'generating');
 
   return (
     <div className="space-y-6">
@@ -1724,219 +1962,332 @@ const CuratedGenerationTab: React.FC<GenerateCasesTabProps> = ({ datasetId, data
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
           </svg>
           <div>
-            <h4 className="text-sm font-medium text-purple-900">Curated Generation Mode</h4>
+            <h4 className="text-sm font-medium text-purple-900">Curated Generation</h4>
             <p className="text-sm text-purple-700 mt-1">
-              Generate evaluation cases with multiple output variations to choose from. Select the best outputs for each case or write your own custom outputs before saving.
+              Review and curate draft cases one at a time. Each draft includes multiple output variations that you can edit and promote directly to cases.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Session Context Information */}
-      {dataset.prompt_lab_id && (
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-purple-900">Prompt Lab-Associated Dataset</h4>
-              <p className="text-sm text-purple-700 mt-1">
-                This dataset is associated with a prompt lab. You can generate cases using the prompt lab's active prompt.
-              </p>
-            </div>
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={useSessionPrompt}
-                onChange={(e) => setUseSessionPrompt(e.target.checked)}
-                className="rounded border-purple-300 text-purple-600 focus:ring-purple-500"
-              />
-              <span className="text-sm font-medium text-purple-900">Use Prompt Lab Prompt</span>
-            </label>
-          </div>
-          
-          {sessionContext.generation_method === 'prompt_lab_prompt' && (
-            <div className="mt-4 space-y-3">
-              <div>
-                <h5 className="text-xs font-medium text-purple-800 uppercase tracking-wider">Prompt Lab</h5>
-                <p className="text-sm text-purple-700">{sessionContext.prompt_lab_name}</p>
-              </div>
-              
-              {sessionContext.prompt_parameters && sessionContext.prompt_parameters.length > 0 && (
-                <div>
-                  <h5 className="text-xs font-medium text-purple-800 uppercase tracking-wider">Prompt Parameters</h5>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {sessionContext.prompt_parameters.map((param) => (
-                      <span
-                        key={param}
-                        className="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800"
-                      >
-                        {param}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* Template Input */}
-      <div style={{ display: useSessionPrompt ? 'none' : 'block' }}>
-        <label className="block text-sm font-medium text-gray-700">
-          Case Template
-        </label>
-        <p className="mt-1 text-sm text-gray-500">
-          Use {'{parameter}'} syntax to include parameters in your template
-        </p>
-        <textarea
-          value={template}
-          onChange={(e) => setTemplate(e.target.value)}
-          rows={6}
-          className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
-          placeholder={`Customer {customer_name} is asking about {issue_type}. They are {emotion} and need {resolution_type}.`}
-        />
-        
-        {/* Available Parameters */}
-        {parameters.length > 0 && (
-          <div className="mt-2">
-            <p className="text-xs text-gray-500">Available parameters:</p>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {parameters.map((param) => (
-                <code
-                  key={param}
-                  className="text-xs bg-gray-100 px-2 py-1 rounded cursor-pointer hover:bg-gray-200"
-                  onClick={() => {
-                    const cursorPos = (document.activeElement as HTMLTextAreaElement)?.selectionStart || template.length;
-                    const newTemplate = template.slice(0, cursorPos) + `{${param}}` + template.slice(cursorPos);
-                    setTemplate(newTemplate);
-                  }}
-                >
-                  {'{' + param + '}'}
-                </code>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Count Selector */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Number of Cases
-        </label>
-        <select
-          value={count}
-          onChange={(e) => setCount(Number(e.target.value))}
-          className="mt-1 block w-32 rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
-        >
-          {[1, 5, 10, 20, 50].map((n) => (
-            <option key={n} value={n}>{n}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Variations Count Selector */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <label className="block text-sm font-medium text-blue-900">
-          Number of Output Variations per Case
-        </label>
-        <select
-          value={variationsCount}
-          onChange={(e) => setVariationsCount(Number(e.target.value))}
-          className="mt-1 block w-32 rounded-md border-blue-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        >
-          {[2, 3, 4, 5].map((n) => (
-            <option key={n} value={n}>{n}</option>
-          ))}
-        </select>
-        <p className="text-xs text-blue-600 mt-1">
-          Each case will have {variationsCount} different output styles to choose from.
-        </p>
-      </div>
-
-      {/* Generate Button */}
-      <div>
-        <button
-          onClick={handleGenerate}
-          disabled={generating || (!useSessionPrompt && !template.trim())}
-          className="btn-primary flex items-center space-x-2"
-        >
-          {generating && (
-            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          )}
-          <span>
-            {generating ? 'Generating...' : `Generate ${count} Case${count !== 1 ? 's' : ''} with Variations`}
-          </span>
-        </button>
-        
-        {generating && (
-          <div className="mt-3">
-            <div className="flex items-center space-x-3">
-              <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-purple-600 rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                <div className="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-              </div>
-              <p className="text-sm text-purple-600 font-medium">
-                Generating {count} evaluation case{count !== 1 ? 's' : ''} with {variationsCount} variations each...
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Error */}
+      {/* Error Display */}
       {error && (
         <div className="rounded-md bg-red-50 p-4">
           <p className="text-sm text-red-800">{error}</p>
         </div>
       )}
 
-      {/* Previews */}
-      {previews.length > 0 && (
-        <div className="space-y-4">
+      {/* Draft Cases */}
+      {readyDrafts.length > 0 ? (
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-medium text-gray-900">Generated Cases</h3>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
-                {Array.from(casesWithVariations.values()).filter(caseData => 
-                  (caseData.selected_output_index !== null) || 
-                  (caseData.custom_output && caseData.custom_output.trim() !== '')
-                ).length} of {casesWithVariations.size} cases ready
+            <h3 className="text-lg font-medium text-gray-900">
+              Draft Cases Ready for Curation
+            </h3>
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+              <span className="text-sm text-gray-500">
+                {readyDrafts.length} ready to curate
               </span>
-              <button
-                onClick={handleAddSelected}
-                disabled={Array.from(casesWithVariations.values()).filter(caseData => 
-                  (caseData.selected_output_index !== null) || 
-                  (caseData.custom_output && caseData.custom_output.trim() !== '')
-                ).length === 0}
-                className="btn-primary"
-              >
-                Add Selected Cases
-              </button>
             </div>
           </div>
+          
+          {/* Show only the first draft */}
+          <DraftCaseCard
+            key={readyDrafts[0].id}
+            draft={readyDrafts[0]}
+            index={0}
+            onPromote={handlePromoteDraft}
+            onDiscard={handleDiscardDraft}
+            curating={curating}
+          />
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <svg
+            className="mx-auto h-12 w-12 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+            />
+          </svg>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">No draft cases ready</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            {generatingDrafts.length > 0 
+              ? 'Draft cases are being generated in the background. Check back in a moment.'
+              : 'Draft cases will be generated automatically for this dataset.'
+            }
+          </p>
+          
+          {/* Manual generation button */}
+          {generatingDrafts.length === 0 && (
+            <div className="mt-6">
+              <button
+                onClick={triggerDraftGeneration}
+                disabled={triggeringGeneration}
+                className="btn-primary flex items-center justify-center space-x-2 mx-auto"
+              >
+                {triggeringGeneration && (
+                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                )}
+                <span>
+                  {triggeringGeneration ? 'Generating Draft Cases...' : 'Generate Draft Cases'}
+                </span>
+              </button>
+              <p className="mt-2 text-xs text-gray-500">
+                This will create new draft cases for you to curate
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
-          <div className="space-y-6">
-            {previews.map((preview, index) => {
-              const caseData = casesWithVariations.get(preview.preview_id) || {
-                ...preview,
-                selected_output_index: null,
-                custom_output: null
-              };
+
+// Draft Case Card Component
+interface DraftCaseCardProps {
+  draft: any;
+  index: number;
+  onPromote: (draftId: number, selectedOutputIndex?: number, customOutput?: string) => void;
+  onDiscard: (draftId: number, reason?: string) => void;
+  curating: boolean;
+}
+
+const DraftCaseCard: React.FC<DraftCaseCardProps> = ({ draft, index, onPromote, onDiscard, curating }) => {
+  const [editingOutputs, setEditingOutputs] = useState<Record<number, string>>({});
+  const [discardReason, setDiscardReason] = useState('');
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
+
+  const handlePromoteOutput = (outputIndex: number, customText?: string) => {
+    if (customText !== undefined) {
+      onPromote(draft.id, undefined, customText.trim());
+    } else {
+      onPromote(draft.id, outputIndex);
+    }
+  };
+
+  const handleEditOutput = (outputIndex: number) => {
+    const currentText = draft.output_variations?.[outputIndex]?.text || '';
+    setEditingOutputs(prev => ({
+      ...prev,
+      [outputIndex]: currentText
+    }));
+  };
+
+  const handleSaveEditedOutput = (outputIndex: number) => {
+    const editedText = editingOutputs[outputIndex];
+    if (editedText && editedText.trim()) {
+      handlePromoteOutput(outputIndex, editedText.trim());
+    }
+  };
+
+  const handleCancelEdit = (outputIndex: number) => {
+    setEditingOutputs(prev => {
+      const newState = { ...prev };
+      delete newState[outputIndex];
+      return newState;
+    });
+  };
+
+  const handleDiscard = () => {
+    onDiscard(draft.id, discardReason.trim() || 'Not suitable');
+    setShowDiscardModal(false);
+    setDiscardReason('');
+  };
+
+  return (
+    <div className="card-elevated p-6">
+      <div className="flex items-start justify-between mb-4">
+        <h4 className="text-lg font-semibold text-gray-900">
+          Draft Case #{index + 1}
+        </h4>
+        <div className="flex items-center space-x-2">
+          <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
+            Draft
+          </span>
+        </div>
+      </div>
+
+      {/* Input Parameters */}
+      <div className="mb-6">
+        <h5 className="text-sm font-medium text-gray-700 mb-2">Input Parameters</h5>
+        {draft.parameters && Object.keys(draft.parameters).length > 0 ? (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+            <table className="min-w-full">
+              <tbody className="bg-white divide-y divide-gray-200">
+                {Object.entries(draft.parameters).map(([key, value]) => (
+                  <tr key={key} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                      {key.replace(/_/g, ' ')}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-800">
+                      {String(value)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="bg-gray-50 p-4 rounded-lg border">
+            <p className="text-sm text-gray-500 italic">No parameters for this case</p>
+          </div>
+        )}
+      </div>
+
+      {/* Output Options */}
+      <div className="mb-6">
+        <h5 className="text-sm font-medium text-gray-700 mb-3">Output Variations</h5>
+        
+        {/* Generated Outputs */}
+        <div className="space-y-4">
+          {draft.output_variations?.map((output: any, outputIndex: number) => (
+            <div
+              key={outputIndex}
+              className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm font-medium text-gray-700">
+                    Option {outputIndex + 1}
+                  </span>
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                    {output.style}
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleEditOutput(outputIndex)}
+                    disabled={curating || editingOutputs[outputIndex] !== undefined}
+                    className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (editingOutputs[outputIndex] !== undefined) {
+                        handleSaveEditedOutput(outputIndex);
+                      } else {
+                        handlePromoteOutput(outputIndex);
+                      }
+                    }}
+                    disabled={curating || (editingOutputs[outputIndex] !== undefined && !editingOutputs[outputIndex]?.trim())}
+                    className="text-xs text-white bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded transition-colors disabled:opacity-50"
+                  >
+                    {curating ? 'Promoting...' : 'Promote to Case'}
+                  </button>
+                </div>
+              </div>
               
-              return (
-                <CaseWithOutputSelection
-                  key={preview.preview_id}
-                  caseData={caseData}
-                  onCaseUpdate={handleCaseUpdate}
-                  caseNumber={index + 1}
+              {editingOutputs[outputIndex] !== undefined ? (
+                // Edit mode
+                <div className="space-y-3">
+                  <textarea
+                    ref={(textarea) => {
+                      if (textarea) {
+                        // Auto-resize on mount
+                        setTimeout(() => {
+                          textarea.style.height = 'auto';
+                          textarea.style.height = textarea.scrollHeight + 'px';
+                        }, 0);
+                      }
+                    }}
+                    value={editingOutputs[outputIndex]}
+                    onChange={(e) => setEditingOutputs(prev => ({
+                      ...prev,
+                      [outputIndex]: e.target.value
+                    }))}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 resize-none overflow-hidden"
+                    placeholder="Edit the output text..."
+                    style={{
+                      height: 'auto',
+                      minHeight: '3rem'
+                    }}
+                    onInput={(e) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      target.style.height = 'auto';
+                      target.style.height = target.scrollHeight + 'px';
+                    }}
+                    autoFocus
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => handleCancelEdit(outputIndex)}
+                      className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 rounded"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // Display mode
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{output.text}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-between pt-4 border-t">
+        <button
+          onClick={() => setShowDiscardModal(true)}
+          disabled={curating}
+          className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
+        >
+          Discard Draft
+        </button>
+      </div>
+
+      {/* Discard Modal */}
+      {showDiscardModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setShowDiscardModal(false)}></div>
+            
+            <div className="relative w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Discard Draft Case</h3>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Reason (optional)
+                </label>
+                <textarea
+                  value={discardReason}
+                  onChange={(e) => setDiscardReason(e.target.value)}
+                  placeholder="Why is this draft not suitable?"
+                  rows={3}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
                 />
-              );
-            })}
+              </div>
+              
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowDiscardModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDiscard}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md"
+                >
+                  Discard Draft
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1944,5 +2295,169 @@ const CuratedGenerationTab: React.FC<GenerateCasesTabProps> = ({ datasetId, data
   );
 };
 
+// Import Data Tab Component
+interface ImportDataTabProps {
+  datasetId: number;
+  dataset: EvaluationDataset;
+  onCasesAdded: () => void;
+  setActiveTab: (tab: 'cases' | 'auto-synthesize' | 'curated-generation' | 'import-data') => void;
+}
+
+const ImportDataTab: React.FC<ImportDataTabProps> = ({ datasetId, dataset, onCasesAdded, setActiveTab }) => {
+  const [file, setFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      setError(null);
+      setSuccess(null);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!file) {
+      setError('Please select a file to import');
+      return;
+    }
+
+    try {
+      setImporting(true);
+      setError(null);
+      
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`/api/evaluations/datasets/${datasetId}/import/`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to import file');
+      }
+
+      const result = await response.json();
+      setSuccess(`Successfully imported ${result.imported_count} cases`);
+      setFile(null);
+      onCasesAdded(); // Refresh the cases list
+      
+      // Clear success message after delay and switch to cases tab
+      setTimeout(() => {
+        setSuccess(null);
+        setActiveTab('cases');
+      }, 3000);
+
+    } catch (err) {
+      setError('Failed to import data. Please check your file format.');
+      console.error('Import error:', err);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Info Box */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start space-x-3">
+          <svg className="h-5 w-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+          </svg>
+          <div>
+            <h4 className="text-sm font-medium text-blue-900">Import Evaluation Cases</h4>
+            <p className="text-sm text-blue-700 mt-1">
+              Upload a JSONL file to import evaluation cases. Each line should contain an object with 'input_text' and 'expected_output' fields.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* File Format Example */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <h5 className="text-sm font-medium text-gray-900 mb-2">Expected File Format (JSONL)</h5>
+        <pre className="text-xs text-gray-700 bg-white p-3 rounded border overflow-x-auto">
+{`{"input_text": "Customer inquiry about order", "expected_output": "Thank you for contacting us..."}
+{"input_text": "Product return request", "expected_output": "We'd be happy to help with your return..."}`}
+        </pre>
+        <p className="text-xs text-gray-600 mt-2">
+          Each line should be a valid JSON object. Optional 'context' field can include parameter values.
+        </p>
+      </div>
+
+      {/* File Upload */}
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select JSONL File
+          </label>
+          <input
+            type="file"
+            accept=".jsonl,.json"
+            onChange={handleFileChange}
+            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+          />
+        </div>
+
+        {file && (
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <p className="text-sm text-gray-700">
+              <span className="font-medium">Selected file:</span> {file.name}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Size: {(file.size / 1024).toFixed(1)} KB
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Import Button */}
+      <div>
+        <button
+          onClick={handleImport}
+          disabled={!file || importing}
+          className="btn-primary flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {importing && (
+            <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          )}
+          <span>
+            {importing ? 'Importing...' : 'Import Cases'}
+          </span>
+        </button>
+      </div>
+
+      {/* Error/Success Messages */}
+      {error && (
+        <div className="rounded-md bg-red-50 p-4">
+          <p className="text-sm text-red-800">{error}</p>
+        </div>
+      )}
+
+      {success && (
+        <div className="rounded-md bg-green-50 p-4">
+          <p className="text-sm text-green-800">{success}</p>
+        </div>
+      )}
+
+      {/* Tips */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <h5 className="text-sm font-medium text-yellow-800 mb-2">Import Tips</h5>
+        <ul className="text-sm text-yellow-700 space-y-1">
+          <li>• Files must be in JSONL format (one JSON object per line)</li>
+          <li>• Each object must have 'input_text' and 'expected_output' fields</li>
+          <li>• Optional 'context' field can contain parameter key-value pairs</li>
+          <li>• Maximum file size: 10MB</li>
+        </ul>
+      </div>
+    </div>
+  );
+};
 
 export default EvaluationDatasetDetail;

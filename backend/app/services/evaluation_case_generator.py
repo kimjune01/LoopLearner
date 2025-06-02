@@ -48,7 +48,7 @@ class EvaluationCaseGenerator:
             'SENDER_INFO': self._generate_sender_info,
         }
     
-    def generate_cases_preview(self, prompt: SystemPrompt, count: int = 5, dataset=None, persist_immediately: bool = False) -> List[Dict[str, Any]]:
+    def generate_cases_preview(self, prompt: SystemPrompt, count: int = 5, dataset=None, persist_immediately: bool = False, max_tokens: int = 500) -> List[Dict[str, Any]]:
         """
         Generate evaluation cases for preview (optionally saved to database)
         
@@ -74,7 +74,7 @@ class EvaluationCaseGenerator:
             input_text = self._substitute_parameters(prompt.content, parameter_values)
             
             # Generate expected output using LLM
-            expected_output = self._generate_expected_output(input_text, prompt.content)
+            expected_output = self._generate_expected_output(input_text, prompt.content, max_tokens)
             
             case = {
                 'preview_id': str(uuid.uuid4()),  # Temporary ID for frontend tracking
@@ -102,7 +102,7 @@ class EvaluationCaseGenerator:
         
         return generated_cases
     
-    def generate_cases_from_template(self, template: str, parameters: List[str], count: int = 5, dataset=None, persist_immediately: bool = False) -> List[Dict[str, Any]]:
+    def generate_cases_from_template(self, template: str, parameters: List[str], count: int = 5, dataset=None, persist_immediately: bool = False, max_tokens: int = 500) -> List[Dict[str, Any]]:
         """
         Generate evaluation cases from a template string
         
@@ -126,7 +126,7 @@ class EvaluationCaseGenerator:
             input_text = self._substitute_parameters(template, parameter_values)
             
             # Generate expected output using LLM
-            expected_output = self._generate_expected_output_from_template(input_text, template)
+            expected_output = self._generate_expected_output_from_template(input_text, template, max_tokens)
             
             case = {
                 'preview_id': str(uuid.uuid4()),  # Temporary ID for frontend tracking
@@ -154,7 +154,7 @@ class EvaluationCaseGenerator:
         
         return generated_cases
     
-    def regenerate_single_case(self, prompt: SystemPrompt, existing_case_data: Dict[str, Any]) -> Dict[str, Any]:
+    def regenerate_single_case(self, prompt: SystemPrompt, existing_case_data: Dict[str, Any], max_tokens: int = 500) -> Dict[str, Any]:
         """
         Regenerate a single case with new parameter values
         
@@ -187,7 +187,7 @@ class EvaluationCaseGenerator:
         input_text = self._substitute_parameters(prompt.content, new_parameter_values)
         
         # Generate expected output
-        expected_output = self._generate_expected_output(input_text, prompt.content)
+        expected_output = self._generate_expected_output(input_text, prompt.content, max_tokens)
         
         return {
             'preview_id': existing_case_data.get('preview_id', str(uuid.uuid4())),
@@ -198,7 +198,7 @@ class EvaluationCaseGenerator:
         }
     
     def update_case_parameters(self, prompt: SystemPrompt, case_data: Dict[str, Any], 
-                              new_parameters: Dict[str, str]) -> Dict[str, Any]:
+                              new_parameters: Dict[str, str], max_tokens: int = 500) -> Dict[str, Any]:
         """
         Update case with manually edited parameter values
         
@@ -221,7 +221,7 @@ class EvaluationCaseGenerator:
         # Keep the same expected output initially, or regenerate if needed
         expected_output = case_data.get('expected_output')
         if not expected_output:
-            expected_output = self._generate_expected_output(input_text, prompt.content)
+            expected_output = self._generate_expected_output(input_text, prompt.content, max_tokens)
         
         return {
             'preview_id': case_data.get('preview_id'),
@@ -231,7 +231,7 @@ class EvaluationCaseGenerator:
             'prompt_content': prompt.content
         }
     
-    def regenerate_expected_output(self, prompt: SystemPrompt, case_data: Dict[str, Any]) -> Dict[str, Any]:
+    def regenerate_expected_output(self, prompt: SystemPrompt, case_data: Dict[str, Any], max_tokens: int = 500) -> Dict[str, Any]:
         """
         Regenerate expected output for a case with existing parameters
         
@@ -243,7 +243,7 @@ class EvaluationCaseGenerator:
             Updated case dictionary with new expected output
         """
         input_text = case_data['input_text']
-        new_expected_output = self._generate_expected_output(input_text, prompt.content)
+        new_expected_output = self._generate_expected_output(input_text, prompt.content, max_tokens)
         
         updated_case = case_data.copy()
         updated_case['expected_output'] = new_expected_output
@@ -281,10 +281,14 @@ class EvaluationCaseGenerator:
         """Substitute parameter values in content"""
         result = content
         for param, value in parameter_values.items():
-            result = result.replace(f'{{{param}}}', value)
+            # Handle both single and double braces for flexibility
+            single_brace_placeholder = '{' + param + '}'
+            double_brace_placeholder = '{{' + param + '}}'
+            result = result.replace(double_brace_placeholder, value)
+            result = result.replace(single_brace_placeholder, value)
         return result
     
-    def _generate_expected_output(self, input_text: str, prompt_template: str) -> str:
+    def _generate_expected_output(self, input_text: str, prompt_template: str, max_tokens: int = 500) -> str:
         """Generate expected output using LLM"""
         try:
             # Create a prompt for the LLM to generate an appropriate response
@@ -301,14 +305,14 @@ Response:"""
             # Run async method in sync context
             import asyncio
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
             response = loop.run_until_complete(self.llm_provider.generate(
                 prompt=generation_prompt,
-                max_tokens=150,
+                max_tokens=max_tokens,  # Use the configurable max_tokens parameter
                 temperature=0.7
             ))
             
@@ -319,7 +323,7 @@ Response:"""
             return f"Thank you for your inquiry. I'll be happy to help you with your request."
     
     def generate_multiple_outputs(self, input_text: str, prompt_template: str, 
-                                num_variations: int = 3, styles: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+                                num_variations: int = 3, styles: Optional[List[str]] = None, max_tokens: int = 600) -> List[Dict[str, Any]]:
         """Generate multiple output variations for a single input"""
         if styles is None:
             styles = ['formal', 'friendly', 'detailed']
@@ -367,7 +371,7 @@ Response:"""
                 
                 response = loop.run_until_complete(self.llm_provider.generate(
                     prompt=generation_prompt,
-                    max_tokens=200,
+                    max_tokens=max_tokens,  # Use the configurable max_tokens parameter
                     temperature=min(temperature, 1.0)
                 ))
                 
@@ -397,7 +401,7 @@ Response:"""
         return outputs
     
     def generate_cases_preview_with_variations(self, prompt: SystemPrompt, count: int = 5, 
-                                              enable_variations: bool = True, dataset=None, persist_immediately: bool = False) -> List[Dict[str, Any]]:
+                                              enable_variations: bool = True, dataset=None, persist_immediately: bool = False, max_tokens: int = 500) -> List[Dict[str, Any]]:
         """Generate evaluation cases with multiple output variations for human selection"""
         if not prompt.parameters:
             prompt.extract_parameters()
@@ -423,7 +427,8 @@ Response:"""
                 output_variations = self.generate_multiple_outputs(
                     input_text=input_text,
                     prompt_template=prompt.content,
-                    num_variations=3
+                    num_variations=3,
+                    max_tokens=max_tokens
                 )
                 case['output_variations'] = output_variations
                 case['selected_output_index'] = None
@@ -446,7 +451,7 @@ Response:"""
                     case['persisted'] = False
             else:
                 # Single output for backward compatibility
-                expected_output = self._generate_expected_output(input_text, prompt.content)
+                expected_output = self._generate_expected_output(input_text, prompt.content, max_tokens)
                 case['expected_output'] = expected_output
                 
                 # Persist immediately if requested
@@ -467,7 +472,7 @@ Response:"""
         
         return generated_cases
     
-    def _generate_expected_output_from_template(self, input_text: str, template: str) -> str:
+    def _generate_expected_output_from_template(self, input_text: str, template: str, max_tokens: int = 500) -> str:
         """Generate expected output for template-based generation"""
         try:
             # Create a prompt for the LLM to generate an appropriate response
@@ -484,14 +489,14 @@ Response:"""
             # Run async method in sync context
             import asyncio
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
             response = loop.run_until_complete(self.llm_provider.generate(
                 prompt=generation_prompt,
-                max_tokens=150,
+                max_tokens=max_tokens,
                 temperature=0.7
             ))
             
