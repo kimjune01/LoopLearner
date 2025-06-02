@@ -373,19 +373,49 @@ class EvaluationDatasetImportView(View):
                 if line.strip():  # Skip empty lines
                     case_data = json.loads(line)
                     
-                    # Map JSONL fields to our model fields
-                    input_text = case_data.get('input') or case_data.get('input_text')
-                    expected_output = case_data.get('expected') or case_data.get('expected_output')
-                    context = case_data.get('context', {})
-                    
-                    if input_text and expected_output:
-                        EvaluationCase.objects.create(
-                            dataset=dataset,
-                            input_text=input_text,
-                            expected_output=expected_output,
-                            context=context
-                        )
-                        imported_count += 1
+                    # Check for parameter-based format
+                    if 'parameters' in case_data:
+                        # New format: parameters + expected_output
+                        parameters = case_data.get('parameters', {})
+                        expected_output = case_data.get('expected_output') or case_data.get('expected')
+                        
+                        if parameters and expected_output:
+                            try:
+                                # Get the prompt template to substitute parameters
+                                prompt_lab = dataset.prompt_lab
+                                current_prompt = prompt_lab.prompts.filter(is_active=True).first()
+                                
+                                if current_prompt:
+                                    # Substitute parameters into the prompt template
+                                    input_text = self._substitute_parameters(current_prompt.content, parameters)
+                                else:
+                                    # Fallback: create a basic template from parameters
+                                    input_text = self._create_input_from_parameters(parameters)
+                                
+                                EvaluationCase.objects.create(
+                                    dataset=dataset,
+                                    input_text=input_text,
+                                    expected_output=expected_output,
+                                    context=parameters  # Store parameters in context
+                                )
+                                imported_count += 1
+                            except Exception as e:
+                                # Log the error but continue processing other cases
+                                continue
+                    else:
+                        # Legacy format: direct input_text + expected_output
+                        input_text = case_data.get('input') or case_data.get('input_text')
+                        expected_output = case_data.get('expected') or case_data.get('expected_output')
+                        context = case_data.get('context', {})
+                        
+                        if input_text and expected_output:
+                            EvaluationCase.objects.create(
+                                dataset=dataset,
+                                input_text=input_text,
+                                expected_output=expected_output,
+                                context=context
+                            )
+                            imported_count += 1
             
             return JsonResponse({
                 'imported_count': imported_count,
@@ -396,6 +426,24 @@ class EvaluationDatasetImportView(View):
             return JsonResponse({'error': f'Invalid file format: {str(e)}'}, status=400)
         except Exception as e:
             return JsonResponse({'error': f'Import failed: {str(e)}'}, status=500)
+    
+    def _substitute_parameters(self, content: str, parameter_values: dict) -> str:
+        """Substitute parameter values in content"""
+        result = content
+        for param, value in parameter_values.items():
+            # Handle both single and double braces for flexibility
+            single_brace_placeholder = '{' + param + '}'
+            double_brace_placeholder = '{{' + param + '}}'
+            result = result.replace(double_brace_placeholder, str(value))
+            result = result.replace(single_brace_placeholder, str(value))
+        return result
+    
+    def _create_input_from_parameters(self, parameters: dict) -> str:
+        """Create a basic input text from parameters when no template is available"""
+        param_strings = []
+        for key, value in parameters.items():
+            param_strings.append(f"{key.replace('_', ' ').title()}: {value}")
+        return "\n".join(param_strings)
 
 
 # Story 2: Generate Evaluation Cases from Prompt Parameters

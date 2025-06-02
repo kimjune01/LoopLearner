@@ -239,6 +239,36 @@ class EvaluationCase(models.Model):
         return f"Case {self.id}: {self.input_text[:50]}..."
 
 
+class DraftCase(models.Model):
+    """Draft evaluation cases awaiting curation"""
+    STATUS_CHOICES = [
+        ('generating', 'Generating'),
+        ('ready', 'Ready for Curation'),
+        ('curating', 'Being Curated'),
+        ('promoted', 'Promoted to Real Case'),
+        ('discarded', 'Discarded'),
+    ]
+    
+    dataset = models.ForeignKey(EvaluationDataset, on_delete=models.CASCADE, related_name='draft_cases')
+    input_text = models.TextField()
+    output_variations = models.JSONField(default=list)  # Array of output variations with metadata
+    parameters = models.JSONField(default=dict, blank=True)  # Parameter values used to generate
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='generating')
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    generation_metadata = models.JSONField(default=dict, blank=True)  # Generation context and settings
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['dataset', 'status']),
+            models.Index(fields=['status', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"Draft {self.id}: {self.input_text[:50]}... ({self.status})"
+
+
 class EvaluationRun(models.Model):
     """Track when we run evaluations"""
     dataset = models.ForeignKey(EvaluationDataset, on_delete=models.CASCADE)

@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { evaluationService } from '../services/evaluationService';
 import { promptLabService } from '../services/promptLabService';
+import { API_BASE_URL } from '../services/api';
 import CaseWithOutputSelection from './CaseWithOutputSelection';
 import type { EvaluationDataset, EvaluationCase, CasePreview } from '../types/evaluation';
 
@@ -2331,7 +2332,7 @@ const ImportDataTab: React.FC<ImportDataTabProps> = ({ datasetId, dataset, onCas
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch(`/api/evaluations/datasets/${datasetId}/import/`, {
+      const response = await fetch(`${API_BASE_URL}/evaluations/datasets/${datasetId}/import/`, {
         method: 'POST',
         body: formData,
       });
@@ -2370,7 +2371,7 @@ const ImportDataTab: React.FC<ImportDataTabProps> = ({ datasetId, dataset, onCas
           <div>
             <h4 className="text-sm font-medium text-blue-900">Import Evaluation Cases</h4>
             <p className="text-sm text-blue-700 mt-1">
-              Upload a JSONL file to import evaluation cases. Each line should contain an object with 'input_text' and 'expected_output' fields.
+              Upload a JSONL file to import evaluation cases. Use parameter key-value pairs that will be substituted into your prompt template.
             </p>
           </div>
         </div>
@@ -2380,11 +2381,13 @@ const ImportDataTab: React.FC<ImportDataTabProps> = ({ datasetId, dataset, onCas
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
         <h5 className="text-sm font-medium text-gray-900 mb-2">Expected File Format (JSONL)</h5>
         <pre className="text-xs text-gray-700 bg-white p-3 rounded border overflow-x-auto">
-{`{"input_text": "Customer inquiry about order", "expected_output": "Thank you for contacting us..."}
-{"input_text": "Product return request", "expected_output": "We'd be happy to help with your return..."}`}
+{`{"parameters": {"user_name": "John Smith", "issue_type": "return policy", "product": "laptop"}, "expected_output": "Hi John Smith, our return policy allows returns within 30 days of purchase for laptops."}
+{"parameters": {"user_name": "Sarah Johnson", "issue_type": "order tracking", "order_id": "ORD-12345"}, "expected_output": "Hello Sarah Johnson, you can track order ORD-12345 using the link in your confirmation email."}
+{"parameters": {"user_name": "Mike Chen", "issue_type": "cancellation", "order_id": "ORD-67890"}, "expected_output": "Hi Mike Chen, I can help you cancel order ORD-67890 within 2 hours of placement."}`}
         </pre>
         <p className="text-xs text-gray-600 mt-2">
-          Each line should be a valid JSON object. Optional 'context' field can include parameter values.
+          <strong>New format (recommended):</strong> Use 'parameters' object with key-value pairs that will be substituted into your prompt template.<br/>
+          <strong>Legacy format:</strong> You can still use 'input'/'expected' or 'input_text'/'expected_output' field names.
         </p>
       </div>
 
@@ -2451,8 +2454,9 @@ const ImportDataTab: React.FC<ImportDataTabProps> = ({ datasetId, dataset, onCas
         <h5 className="text-sm font-medium text-yellow-800 mb-2">Import Tips</h5>
         <ul className="text-sm text-yellow-700 space-y-1">
           <li>• Files must be in JSONL format (one JSON object per line)</li>
-          <li>• Each object must have 'input_text' and 'expected_output' fields</li>
-          <li>• Optional 'context' field can contain parameter key-value pairs</li>
+          <li>• <strong>Recommended:</strong> Use 'parameters' object with key-value pairs + 'expected_output' field</li>
+          <li>• Parameters will be substituted into your active prompt template (e.g., {{user_name}} → "John Smith")</li>
+          <li>• <strong>Legacy support:</strong> Direct 'input'/'input_text' and 'expected'/'expected_output' fields still work</li>
           <li>• Maximum file size: 10MB</li>
         </ul>
       </div>

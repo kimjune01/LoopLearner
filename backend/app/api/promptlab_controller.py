@@ -231,7 +231,7 @@ class PromptLabDetailView(PromptLabAPIView):
             calculator = ConfidenceCalculator()
             
             # Get or update confidence tracker
-            confidence_tracker = calculator.update_session_confidence(prompt_lab)
+            confidence_tracker = calculator.update_prompt_lab_confidence(prompt_lab)
             
             return {
                 'user_confidence': confidence_tracker.user_confidence,
@@ -875,7 +875,7 @@ class PromptLabConfidenceView(PromptLabAPIView):
             calculator = ConfidenceCalculator()
             
             # Get or create confidence tracker
-            confidence_tracker = calculator.update_session_confidence(prompt_lab)
+            confidence_tracker = calculator.update_prompt_lab_confidence(prompt_lab)
             
             # Calculate current metrics
             user_confidence = calculator.calculate_user_confidence(prompt_lab)
@@ -927,7 +927,7 @@ class RecalculateConfidenceView(PromptLabAPIView):
             from app.services.confidence_calculator import ConfidenceCalculator
             
             calculator = ConfidenceCalculator()
-            confidence_tracker = calculator.update_session_confidence(prompt_lab)
+            confidence_tracker = calculator.update_prompt_lab_confidence(prompt_lab)
             
             response_data = {
                 'prompt_lab_id': str(prompt_lab.id),
@@ -1272,7 +1272,7 @@ class ConvergenceAssessmentView(PromptLabAPIView):
         """Get optimization iteration history"""
         try:
             prompts = SystemPrompt.objects.filter(
-                session=prompt_lab
+                prompt_lab=prompt_lab
             ).order_by('version')
             
             return [

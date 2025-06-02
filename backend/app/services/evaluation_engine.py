@@ -674,13 +674,10 @@ class EvaluationEngine:
     
     def _generate_response_for_case(self, prompt: SystemPrompt, case: EvaluationCase) -> str:
         """Generate a response for an evaluation case."""
-        from .unified_llm_provider import LLMProviderFactory, LLMConfig
+        from .unified_llm_provider import LLMProviderFactory
         
-        # Use mock provider for testing, or configure from environment
-        provider = LLMProviderFactory.create_provider(LLMConfig(
-            provider="mock",
-            model="test-model"
-        ))
+        # Use provider from environment configuration (supports Ollama, OpenAI, etc.)
+        provider = LLMProviderFactory.from_environment()
         
         # Substitute parameters in prompt content
         prompt_content = prompt.content
@@ -691,12 +688,38 @@ class EvaluationEngine:
         
         # Generate response
         try:
-            response = provider.generate_text(
-                prompt=case.input_text,
-                system_prompt=prompt_content,
-                temperature=0.7,
-                max_tokens=300
-            )
+            # Use async generate method and run in sync context
+            import asyncio
+            try:
+                # Try to get the current event loop
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # We're in an async context, create a new thread
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, provider.generate(
+                            prompt=case.input_text,
+                            system_prompt=prompt_content,
+                            temperature=0.7,
+                            max_tokens=300
+                        ))
+                        response = future.result()
+                else:
+                    # We can run directly
+                    response = asyncio.run(provider.generate(
+                        prompt=case.input_text,
+                        system_prompt=prompt_content,
+                        temperature=0.7,
+                        max_tokens=300
+                    ))
+            except RuntimeError:
+                # No event loop, run directly
+                response = asyncio.run(provider.generate(
+                    prompt=case.input_text,
+                    system_prompt=prompt_content,
+                    temperature=0.7,
+                    max_tokens=300
+                ))
             return response.strip()
         except Exception as e:
             logger.error(f"LLM generation failed: {str(e)}")

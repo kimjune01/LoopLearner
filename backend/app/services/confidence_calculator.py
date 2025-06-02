@@ -7,7 +7,7 @@ from typing import Dict, Any, Tuple
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.db.models import Count, Avg, Q
-from core.models import Session, PromptLabConfidence, UserFeedback, ReasonRating, Draft
+from core.models import PromptLab, PromptLabConfidence, UserFeedback, ReasonRating, Draft
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class ConfidenceCalculator:
     def __init__(self):
         self.logger = logger
     
-    def calculate_user_confidence(self, session: Session) -> float:
+    def calculate_user_confidence(self, prompt_lab: PromptLab) -> float:
         """
         Calculate user confidence based on feedback consistency and patterns
         
@@ -28,9 +28,9 @@ class ConfidenceCalculator:
         - User's feedback aligns with their previous patterns
         """
         try:
-            # Get all feedback for this session
+            # Get all feedback for this prompt lab
             feedbacks = UserFeedback.objects.filter(
-                draft__email__session=session
+                draft__email__prompt_lab=prompt_lab
             ).order_by('created_at')
             
             if feedbacks.count() < 2:
@@ -57,10 +57,10 @@ class ConfidenceCalculator:
             return max(0.0, min(1.0, user_confidence))
             
         except Exception as e:
-            self.logger.error(f"Error calculating user confidence for session {session.id}: {str(e)}")
+            self.logger.error(f"Error calculating user confidence for prompt lab {prompt_lab.id}: {str(e)}")
             return 0.0
     
-    def calculate_system_confidence(self, session: Session) -> float:
+    def calculate_system_confidence(self, prompt_lab: PromptLab) -> float:
         """
         Calculate system confidence based on reasoning alignment and prediction accuracy
         
@@ -70,20 +70,20 @@ class ConfidenceCalculator:
         - Feedback patterns are learnable/modelable
         """
         try:
-            # Get all drafts and their reasoning ratings for this session
-            drafts = Draft.objects.filter(email__session=session)
+            # Get all drafts and their reasoning ratings for this prompt lab
+            drafts = Draft.objects.filter(email__prompt_lab=prompt_lab)
             
             if drafts.count() == 0:
                 return 0.1
             
             # Calculate reasoning alignment score
-            reasoning_score = self._calculate_reasoning_alignment(session)
+            reasoning_score = self._calculate_reasoning_alignment(prompt_lab)
             
             # Calculate prediction accuracy (how well system predicts user actions)
-            prediction_score = self._calculate_prediction_accuracy(session)
+            prediction_score = self._calculate_prediction_accuracy(prompt_lab)
             
             # Calculate learning velocity (how quickly system improves)
-            velocity_score = self._calculate_learning_velocity(session)
+            velocity_score = self._calculate_learning_velocity(prompt_lab)
             
             # Weight the scores
             system_confidence = (
@@ -96,7 +96,7 @@ class ConfidenceCalculator:
             return max(0.0, min(1.0, system_confidence))
             
         except Exception as e:
-            self.logger.error(f"Error calculating system confidence for session {session.id}: {str(e)}")
+            self.logger.error(f"Error calculating system confidence for prompt lab {prompt_lab.id}: {str(e)}")
             return 0.0
     
     def _calculate_feedback_consistency(self, feedbacks) -> float:
@@ -178,11 +178,11 @@ class ConfidenceCalculator:
         alignment_score = action_overlap / total_unique_actions
         return max(0.3, min(1.0, alignment_score))
     
-    def _calculate_reasoning_alignment(self, session: Session) -> float:
+    def _calculate_reasoning_alignment(self, prompt_lab: PromptLab) -> float:
         """Calculate how well reasoning factors align with user preferences"""
-        # Get all reason ratings for this session
+        # Get all reason ratings for this prompt lab
         reason_ratings = ReasonRating.objects.filter(
-            feedback__draft__email__session=session
+            feedback__draft__email__prompt_lab=prompt_lab
         )
         
         if reason_ratings.count() == 0:
@@ -205,17 +205,17 @@ class ConfidenceCalculator:
         else:
             return 0.3
     
-    def _calculate_prediction_accuracy(self, session: Session) -> float:
+    def _calculate_prediction_accuracy(self, prompt_lab: PromptLab) -> float:
         """Calculate how accurately system can predict user actions"""
         # This is a placeholder for future ML model predictions
         # For now, use reasoning alignment as proxy
-        return self._calculate_reasoning_alignment(session)
+        return self._calculate_reasoning_alignment(prompt_lab)
     
-    def _calculate_learning_velocity(self, session: Session) -> float:
+    def _calculate_learning_velocity(self, prompt_lab: PromptLab) -> float:
         """Calculate how quickly the system is improving"""
         # Get feedback over time and look for improvement trends
         feedbacks = UserFeedback.objects.filter(
-            draft__email__session=session
+            draft__email__prompt_lab=prompt_lab
         ).order_by('created_at')
         
         if feedbacks.count() < 5:
@@ -241,50 +241,50 @@ class ConfidenceCalculator:
         else:
             return 0.3  # Declining
     
-    def is_user_confidence_sufficient(self, session: Session) -> bool:
+    def is_user_confidence_sufficient(self, prompt_lab: PromptLab) -> bool:
         """Check if user confidence meets threshold"""
-        confidence = self.calculate_user_confidence(session)
+        confidence = self.calculate_user_confidence(prompt_lab)
         return confidence >= PromptLabConfidence.USER_CONFIDENCE_THRESHOLD
     
-    def is_system_confidence_sufficient(self, session: Session) -> bool:
+    def is_system_confidence_sufficient(self, prompt_lab: PromptLab) -> bool:
         """Check if system confidence meets threshold"""
-        confidence = self.calculate_system_confidence(session)
+        confidence = self.calculate_system_confidence(prompt_lab)
         return confidence >= PromptLabConfidence.SYSTEM_CONFIDENCE_THRESHOLD
     
-    def should_continue_learning(self, session: Session) -> bool:
+    def should_continue_learning(self, prompt_lab: PromptLab) -> bool:
         """Determine if system should continue learning"""
-        user_sufficient = self.is_user_confidence_sufficient(session)
-        system_sufficient = self.is_system_confidence_sufficient(session)
+        user_sufficient = self.is_user_confidence_sufficient(prompt_lab)
+        system_sufficient = self.is_system_confidence_sufficient(prompt_lab)
         
         # Continue learning if either confidence is insufficient
         return not (user_sufficient and system_sufficient)
     
-    def is_cold_start_complete(self, session: Session) -> bool:
+    def is_cold_start_complete(self, prompt_lab: PromptLab) -> bool:
         """Check if cold start phase is complete"""
         # Cold start is complete when we have sufficient feedback and reasonable confidence
-        feedbacks = UserFeedback.objects.filter(draft__email__session=session)
+        feedbacks = UserFeedback.objects.filter(draft__email__prompt_lab=prompt_lab)
         
         # Need minimum amount of feedback
         if feedbacks.count() < 5:
             return False
         
         # Need at least basic confidence levels
-        user_conf = self.calculate_user_confidence(session)
-        system_conf = self.calculate_system_confidence(session)
+        user_conf = self.calculate_user_confidence(prompt_lab)
+        system_conf = self.calculate_system_confidence(prompt_lab)
         
         # Lower thresholds for cold start completion
         return user_conf >= 0.4 and system_conf >= 0.4
     
-    def update_session_confidence(self, session: Session) -> PromptLabConfidence:
-        """Calculate and update confidence metrics for a session"""
+    def update_prompt_lab_confidence(self, prompt_lab: PromptLab) -> PromptLabConfidence:
+        """Calculate and update confidence metrics for a prompt lab"""
         try:
             # Calculate metrics
-            user_confidence = self.calculate_user_confidence(session)
-            system_confidence = self.calculate_system_confidence(session)
+            user_confidence = self.calculate_user_confidence(prompt_lab)
+            system_confidence = self.calculate_system_confidence(prompt_lab)
             
             # Get or create confidence tracker
             confidence_tracker, created = PromptLabConfidence.objects.get_or_create(
-                session=session,
+                prompt_lab=prompt_lab,
                 defaults={
                     'user_confidence': user_confidence,
                     'system_confidence': system_confidence,
@@ -303,9 +303,9 @@ class ConfidenceCalculator:
                 confidence_tracker.confidence_trend = confidence_trend
             
             # Update detailed breakdown
-            feedbacks = UserFeedback.objects.filter(draft__email__session=session)
+            feedbacks = UserFeedback.objects.filter(draft__email__prompt_lab=prompt_lab)
             confidence_tracker.feedback_consistency_score = self._calculate_feedback_consistency(feedbacks)
-            confidence_tracker.reasoning_alignment_score = self._calculate_reasoning_alignment(session)
+            confidence_tracker.reasoning_alignment_score = self._calculate_reasoning_alignment(prompt_lab)
             confidence_tracker.total_feedback_count = feedbacks.count()
             confidence_tracker.consistent_feedback_streak = self._calculate_consistency_streak(feedbacks)
             
@@ -313,10 +313,10 @@ class ConfidenceCalculator:
             return confidence_tracker
             
         except Exception as e:
-            self.logger.error(f"Error updating session confidence for {session.id}: {str(e)}")
+            self.logger.error(f"Error updating prompt lab confidence for {prompt_lab.id}: {str(e)}")
             # Return default values if calculation fails
             confidence_tracker, _ = PromptLabConfidence.objects.get_or_create(
-                session=session,
+                prompt_lab=prompt_lab,
                 defaults={'user_confidence': 0.1, 'system_confidence': 0.1}
             )
             return confidence_tracker

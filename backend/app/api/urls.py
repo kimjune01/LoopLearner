@@ -61,6 +61,7 @@ from .evaluation_controller import (
     EvaluationDatasetListView,
     EvaluationDatasetDetailView,
     EvaluationCaseListView,
+    EvaluationCaseDetailView,
     EvaluationDatasetImportView,
     EvaluationCaseGeneratorView,
     EvaluationCaseSelectionView,
@@ -70,9 +71,17 @@ from .evaluation_controller import (
     EvaluationDatasetCompatibilityView,
     EvaluationDatasetMigrationView,
     EvaluationRunTriggerView,
+    EvaluationRunListView,
+    EvaluationRunDetailView,
     EvaluationRunResultsView,
     EvaluationComparePromptsView,
+    # Draft case management
+    EvaluationDatasetDraftsView,
+    EvaluationDraftPromoteView,
+    EvaluationDraftDiscardView,
+    EvaluationDraftStatusView,
 )
+from .llm_status_controller import LLMStatusView
 
 urlpatterns = [
     # PromptLab management endpoints
@@ -163,10 +172,14 @@ urlpatterns = [
     path('health/', HealthCheckView.as_view(), name='health-check'),
     path('metrics/', GetSystemMetricsView.as_view(), name='system-metrics'),
     
+    # LLM status endpoint
+    path('llm/status/', LLMStatusView.as_view(), name='llm-status'),
+    
     # Evaluation endpoints
     path('evaluations/datasets/', EvaluationDatasetListView.as_view(), name='evaluation-dataset-list'),
     path('evaluations/datasets/<int:dataset_id>/', EvaluationDatasetDetailView.as_view(), name='evaluation-dataset-detail'),
     path('evaluations/datasets/<int:dataset_id>/cases/', EvaluationCaseListView.as_view(), name='evaluation-case-list'),
+    path('evaluations/datasets/<int:dataset_id>/cases/<int:case_id>/', EvaluationCaseDetailView.as_view(), name='evaluation-case-detail'),
     path('evaluations/datasets/<int:dataset_id>/import/', EvaluationDatasetImportView.as_view(), name='evaluation-dataset-import'),
     
     # Story 2: Case generation endpoints
@@ -182,6 +195,16 @@ urlpatterns = [
     
     # Evaluation execution endpoints
     path('evaluations/run/', EvaluationRunTriggerView.as_view(), name='evaluation-run-trigger'),
+    path('evaluations/datasets/<int:dataset_id>/runs/', EvaluationRunListView.as_view(), name='evaluation-run-list'),
+    path('evaluations/datasets/<int:dataset_id>/runs/delete-all/', EvaluationRunListView.as_view(), name='evaluation-run-delete-all'),
+    path('evaluations/runs/<int:run_id>/', EvaluationRunDetailView.as_view(), name='evaluation-run-detail'),
     path('evaluations/runs/<int:run_id>/results/', EvaluationRunResultsView.as_view(), name='evaluation-run-results'),
     path('evaluations/compare/', EvaluationComparePromptsView.as_view(), name='evaluation-compare-prompts'),
+    
+    # Draft case management endpoints
+    path('evaluations/datasets/<int:dataset_id>/drafts/', EvaluationDatasetDraftsView.as_view(), name='evaluation-dataset-drafts'),
+    path('evaluations/datasets/<int:dataset_id>/drafts/generate/', EvaluationDatasetDraftsView.as_view(), name='evaluation-generate-drafts'),
+    path('evaluations/datasets/<int:dataset_id>/drafts/<int:draft_id>/promote/', EvaluationDraftPromoteView.as_view(), name='evaluation-promote-draft'),
+    path('evaluations/datasets/<int:dataset_id>/drafts/<int:draft_id>/discard/', EvaluationDraftDiscardView.as_view(), name='evaluation-discard-draft'),
+    path('evaluations/drafts/status/', EvaluationDraftStatusView.as_view(), name='evaluation-draft-status'),
 ]

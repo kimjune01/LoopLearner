@@ -26,23 +26,39 @@ export interface EvaluationCase {
 }
 
 export interface EvaluationRun {
-  id: number;
+  id?: number;
+  run_id?: number; // Backend sometimes returns run_id instead of id
   dataset: number;
   prompt: number;
   status: 'pending' | 'running' | 'completed' | 'failed';
   overall_score: number | null;
   started_at: string;
   completed_at: string | null;
+  // Additional fields for run history
+  total_cases?: number;
+  passed_cases?: number;
+  failed_cases?: number;
+  pass_rate?: number;
+  avg_similarity_score?: number;
+  prompt_version?: number;
+  prompt_id?: number;
+  duration_seconds?: number | null;
 }
 
 export interface EvaluationResult {
   id: number;
   run: number;
   case: number;
+  case_id?: number;
+  case_number?: number;
+  input_text?: string;
+  expected_output?: string;
   generated_output: string;
   similarity_score: number;
   passed: boolean;
   details: Record<string, any>;
+  case_context?: any;
+  performance_tier?: string;
 }
 
 export interface DatasetCompatibility {

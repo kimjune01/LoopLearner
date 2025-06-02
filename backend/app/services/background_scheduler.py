@@ -14,6 +14,7 @@ from .prompt_rewriter import PromptRewriter
 from .evaluation_engine import EvaluationEngine
 from .reward_aggregator import RewardFunctionAggregator
 from .unified_llm_provider import LLMProviderFactory, LLMConfig
+from .draft_case_manager import DraftCaseScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +253,7 @@ class OptimizationScheduler:
         self.check_interval_minutes = check_interval_minutes
         self.trigger_config = trigger_config or OptimizationTrigger()
         self.orchestrator: Optional[OptimizationOrchestrator] = None
+        self.draft_scheduler: Optional[DraftCaseScheduler] = None
         self.scheduler_task: Optional[asyncio.Task] = None
         self.is_running = False
         self._last_check_time: Optional[datetime] = None
@@ -281,6 +283,9 @@ class OptimizationScheduler:
             trigger_config=self.trigger_config
         )
         
+        # Create draft case scheduler
+        self.draft_scheduler = DraftCaseScheduler()
+        
         logger.info("Optimization scheduler initialized")
     
     async def start(self):
@@ -295,6 +300,11 @@ class OptimizationScheduler:
         
         self.is_running = True
         self.scheduler_task = asyncio.create_task(self._scheduler_loop())
+        
+        # Start draft case scheduler
+        if self.draft_scheduler:
+            await self.draft_scheduler.start()
+        
         logger.info(f"Started optimization scheduler (check interval: {self.check_interval_minutes} minutes)")
     
     async def stop(self):
@@ -311,6 +321,10 @@ class OptimizationScheduler:
                 await self.scheduler_task
             except asyncio.CancelledError:
                 pass
+        
+        # Stop draft case scheduler
+        if self.draft_scheduler:
+            await self.draft_scheduler.stop()
         
         logger.info("Stopped optimization scheduler")
     

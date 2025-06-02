@@ -1,20 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { PromptLab } from '../types/promptLab';
+import type { EvaluationDataset } from '../types/evaluation';
 import { promptLabService } from '../services/promptLabService';
+import { evaluationService } from '../services/evaluationService';
+import { generateDatasetNameAndDescription } from '../utils/nameGenerator';
 import { PromptEditor } from './PromptEditor';
 import PromptLabProgressVisualization from './PromptLabProgressVisualization';
 
 export const PromptLabDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const [promptLab, setPromptLab] = useState<PromptLab | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isPromptExpanded, setIsPromptExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<'prompt' | 'progress'>('prompt');
+  const [activeTab, setActiveTab] = useState<'prompt' | 'progress' | 'evaluations'>('prompt');
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  
+  // Evaluation state
+  const [datasets, setDatasets] = useState<EvaluationDataset[]>([]);
+  const [datasetsLoading, setDatasetsLoading] = useState(false);
+  const [datasetsError, setDatasetsError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [filterByParams, setFilterByParams] = useState(true);
+  const navigate = useNavigate();
 
   // Function to highlight parameters in prompt content
   const highlightParameters = (text: string) => {
@@ -71,7 +84,20 @@ export const PromptLabDetail: React.FC = () => {
 
   useEffect(() => {
     loadPromptLab();
-  }, [id]);
+    
+    // Check for tab parameter in URL
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['prompt', 'progress', 'evaluations'].includes(tabParam)) {
+      setActiveTab(tabParam as 'prompt' | 'progress' | 'evaluations');
+    }
+  }, [id, searchParams]);
+  
+  // Load evaluation datasets when evaluations tab is active
+  useEffect(() => {
+    if (activeTab === 'evaluations' && id) {
+      loadDatasets();
+    }
+  }, [activeTab, id, filterByParams]);
 
   // Close export menu when clicking outside
   useEffect(() => {
@@ -215,14 +241,42 @@ ${promptLab.active_prompt.content}
     
     setShowExportMenu(false);
   };
-
-  const handleRunEvals = async () => {
-    // Scroll to the evaluation section where users can manage their evaluation datasets
-    const evaluationSection = document.querySelector('[data-section="evaluation"]');
-    if (evaluationSection) {
-      evaluationSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  
+  const loadDatasets = async () => {
+    if (!id) return;
+    
+    try {
+      setDatasetsLoading(true);
+      const data = await evaluationService.getDatasets(id, filterByParams);
+      setDatasets(data);
+      setDatasetsError(null);
+    } catch (err) {
+      setDatasetsError('Failed to load evaluation datasets');
+      console.error('Error loading datasets:', err);
+    } finally {
+      setDatasetsLoading(false);
     }
   };
+  
+  const handleDeleteDataset = async (datasetId: number) => {
+    if (!window.confirm('Are you sure you want to delete this dataset?')) {
+      return;
+    }
+
+    try {
+      await evaluationService.deleteDataset(datasetId);
+      await loadDatasets();
+    } catch (err) {
+      setDatasetsError('Failed to delete dataset');
+      console.error('Error deleting dataset:', err);
+    }
+  };
+  
+  const filteredDatasets = datasets.filter(dataset =>
+    dataset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    dataset.description.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
 
   if (loading) {
     return (
@@ -367,6 +421,16 @@ ${promptLab.active_prompt.content}
           >
             Learning Progress
           </button>
+          <button
+            onClick={() => setActiveTab('evaluations')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'evaluations'
+                ? 'border-purple-500 text-purple-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Evaluations
+          </button>
         </nav>
       </div>
 
@@ -489,16 +553,6 @@ ${promptLab.active_prompt.content}
                     {/* Prompt Actions */}
                     <div className="flex flex-wrap gap-3 justify-center">
                       <button 
-                        onClick={handleRunEvals}
-                        title="Scroll to evaluation section to manage evaluation datasets and test prompt performance"
-                        className="btn-primary flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Manage Evaluations
-                      </button>
-                      <button 
                         onClick={() => setShowPromptEditor(true)}
                         className="btn-secondary flex items-center gap-2"
                       >
@@ -506,18 +560,6 @@ ${promptLab.active_prompt.content}
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                         </svg>
                         Edit Prompt
-                      </button>
-                      <button className="btn-secondary flex items-center gap-2">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        View History
-                      </button>
-                      <button className="btn-secondary flex items-center gap-2">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                        </svg>
-                        Performance Metrics
                       </button>
                       <div className="relative" ref={exportMenuRef}>
                         <button 
@@ -701,43 +743,13 @@ ${promptLab.active_prompt.content}
                   Quick Actions
                 </h3>
                 <div className="space-y-2">
-                  <button className="w-full btn-secondary text-left justify-start">
-                    Start Learning Lab
-                  </button>
-                  <button className="w-full btn-secondary text-left justify-start">
-                    Generate Test Email
-                  </button>
-                  <button className="w-full btn-secondary text-left justify-start">
-                    Export Prompt Lab Data
-                  </button>
+                  <p className="text-sm text-gray-500 text-center py-4">
+                    Quick actions will appear here as features are developed.
+                  </p>
                 </div>
               </div>
             </div>
 
-                {/* Evaluation Section */}
-                <div className="mt-12" data-section="evaluation">
-              <div className="card-elevated p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Evaluation Datasets
-                </h3>
-                <p className="text-gray-600 mb-4">
-                  Test your prompt performance against predefined evaluation datasets.
-                </p>
-                <Link 
-                  to={`/prompt-labs/${id}/evaluation/datasets`}
-                  className="btn-primary inline-flex items-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                  View Evaluation Datasets
-                </Link>
-              </div>
-                </div>
               </>
             )}
 
@@ -750,6 +762,130 @@ ${promptLab.active_prompt.content}
                   console.log('Optimization triggered from progress view');
                 }}
               />
+            )}
+
+            {/* Evaluations Tab Content */}
+            {activeTab === 'evaluations' && (
+              <div className="space-y-8">
+                <div className="text-center mb-8">
+                  <h2 className="text-4xl font-bold text-gray-900 mb-3 bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+                    Evaluation Datasets
+                  </h2>
+                  <p className="text-gray-600 text-lg">
+                    Test your prompt performance against predefined evaluation datasets
+                  </p>
+                  {promptLab?.active_prompt?.parameters && promptLab.active_prompt.parameters.length > 0 && (
+                    <div className="mt-6">
+                      <p className="text-sm text-gray-700 mb-2">Prompt lab parameters:</p>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {promptLab.active_prompt.parameters.map((param: string) => (
+                          <span
+                            key={param}
+                            className="inline-flex items-center rounded-full bg-purple-100 px-3 py-1 text-sm font-medium text-purple-800"
+                          >
+                            {param}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Error Alert */}
+                {datasetsError && (
+                  <div className="mb-6 rounded-md bg-red-50 p-4">
+                    <p className="text-sm text-red-800">{datasetsError}</p>
+                  </div>
+                )}
+
+                {/* Actions Bar */}
+                <div className="mb-6 flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Search datasets..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-64 rounded-lg border border-gray-300 px-4 py-2 pl-10 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      />
+                      <svg
+                        className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                        />
+                      </svg>
+                    </div>
+                    
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={filterByParams}
+                        onChange={(e) => setFilterByParams(e.target.checked)}
+                        className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span className="text-sm text-gray-700">Filter by parameters</span>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={() => setShowCreateModal(true)}
+                      className="btn-primary flex items-center space-x-2"
+                    >
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      <span>New Dataset</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Dataset Grid */}
+                {datasetsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+                  </div>
+                ) : filteredDatasets.length === 0 ? (
+                  <div className="text-center py-12">
+                    <svg
+                      className="mx-auto h-12 w-12 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No datasets found</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      {searchTerm ? 'Try adjusting your search' : 'Get started by creating a new dataset'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    {filteredDatasets.map((dataset) => (
+                      <DatasetCard
+                        key={dataset.id}
+                        dataset={dataset}
+                        onDelete={() => handleDeleteDataset(dataset.id)}
+                        onClick={() => navigate(`/evaluation/datasets/${dataset.id}`)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -766,6 +902,261 @@ ${promptLab.active_prompt.content}
           isCreating={!promptLab?.active_prompt?.content}
         />
       )}
+
+      {/* Create Dataset Modal */}
+      {showCreateModal && (
+        <CreateDatasetModal
+          promptLabId={id}
+          promptLab={promptLab}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={(datasetId: number) => {
+            setShowCreateModal(false);
+            navigate(`/evaluation/datasets/${datasetId}`);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+// Dataset Card Component
+interface DatasetCardProps {
+  dataset: EvaluationDataset;
+  onClick: () => void;
+  onDelete: () => void;
+}
+
+const DatasetCard: React.FC<DatasetCardProps> = ({ dataset, onClick, onDelete }) => {
+  return (
+    <div className="card-elevated group cursor-pointer" onClick={onClick}>
+      <div className="p-6">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-gray-900 group-hover:text-purple-600">
+              {dataset.name}
+            </h3>
+            <p className="mt-1 text-sm text-gray-600 line-clamp-2">
+              {dataset.description}
+            </p>
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="ml-2 p-1 text-gray-400 hover:text-red-600 transition-colors"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div className="mt-4 flex items-center space-x-4 text-sm text-gray-500">
+          <div className="flex items-center">
+            <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            {dataset.case_count || 0} cases
+          </div>
+          {dataset.average_score !== undefined && (
+            <div className="flex items-center">
+              <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              {(dataset.average_score * 100).toFixed(1)}% avg
+            </div>
+          )}
+        </div>
+
+        {/* Parameters */}
+        {dataset.parameters && dataset.parameters.length > 0 && (
+          <div className="mt-4">
+            <div className="flex flex-wrap gap-2">
+              {dataset.parameters.slice(0, 3).map((param) => (
+                <span
+                  key={param}
+                  className="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800"
+                >
+                  {param}
+                </span>
+              ))}
+              {dataset.parameters.length > 3 && (
+                <span className="text-xs text-gray-500">
+                  +{dataset.parameters.length - 3} more
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Create Dataset Modal Component
+interface CreateDatasetModalProps {
+  promptLabId?: string;
+  promptLab?: PromptLab | null;
+  onClose: () => void;
+  onCreated: (datasetId: number) => void;
+}
+
+const CreateDatasetModal: React.FC<CreateDatasetModalProps> = ({ promptLabId, promptLab, onClose, onCreated }) => {
+  // Auto-generate initial name and description
+  const initialData = generateDatasetNameAndDescription();
+  
+  // Get prompt lab parameters if available
+  const promptLabParameters = promptLab?.active_prompt?.parameters || [];
+  
+  const [name, setName] = useState(initialData.name);
+  const [description, setDescription] = useState(initialData.description);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleGenerateNewName = () => {
+    const newData = generateDatasetNameAndDescription();
+    setName(newData.name);
+    setDescription(newData.description);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!name || !description) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      setError(null);
+      
+      const datasetData = {
+        name,
+        description,
+        parameters: promptLabParameters,
+        parameter_descriptions: {},
+        prompt_lab_id: promptLabId,
+      };
+      
+      const createdDataset = await evaluationService.createDataset(datasetData);
+      onCreated(createdDataset.id);
+    } catch (err) {
+      setError('Failed to create dataset');
+      console.error('Error creating dataset:', err);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={onClose}></div>
+        
+        <div className="relative w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+          <h3 className="text-lg font-medium text-gray-900 mb-6">Create Evaluation Dataset</h3>
+          
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {error && (
+              <div className="rounded-md bg-red-50 p-3">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
+
+            {/* Title Section */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Dataset Name
+              </label>
+              
+              {isEditingName ? (
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="flex-1 text-lg font-bold text-gray-900 border-0 border-b-2 border-purple-500 focus:outline-none focus:border-purple-600 bg-transparent"
+                    autoFocus
+                    onBlur={() => setIsEditingName(false)}
+                    onKeyPress={(e) => e.key === 'Enter' && setIsEditingName(false)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingName(false)}
+                    className="text-green-600 hover:text-green-700"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <h4 className="text-lg font-bold text-gray-900">{name}</h4>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingName(true)}
+                      className="text-gray-400 hover:text-gray-600"
+                      title="Edit name"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGenerateNewName}
+                      className="text-gray-400 hover:text-gray-600"
+                      title="Generate new name"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Description Field */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Description
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={4}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
+                placeholder="Describe what this dataset will be used for..."
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={creating}
+                className="btn-primary"
+              >
+                {creating ? 'Creating...' : 'Create Dataset'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   );
 };

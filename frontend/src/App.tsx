@@ -7,6 +7,8 @@ import { AboutPage } from './components/AboutPage'
 import EvaluationDatasetList from './components/EvaluationDatasetList'
 import EvaluationDatasetDetail from './components/EvaluationDatasetDetail'
 import EvaluationRun from './components/EvaluationRun'
+import EvaluationRunsHistory from './components/EvaluationRunsHistory'
+import EvaluationRunDetail from './components/EvaluationRunDetail'
 import ReasoningFeedbackDemo from './components/ReasoningFeedbackDemo'
 import ProgressVisualizationDemo from './components/ProgressVisualizationDemo'
 
@@ -121,10 +123,13 @@ function App() {
         <Routes>
           <Route path="/" element={<PromptLabCollection />} />
           <Route path="/prompt-labs/:id" element={<PromptLabDetail />} />
+          <Route path="/prompt-labs/:promptLabId/evaluation/datasets" element={<EvaluationDatasetList />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/evaluation/datasets" element={<Navigate to="/" replace />} />
           <Route path="/evaluation/datasets/:datasetId" element={<EvaluationDatasetDetail />} />
           <Route path="/evaluation/datasets/:datasetId/run" element={<EvaluationRun />} />
+          <Route path="/evaluation/datasets/:datasetId/runs" element={<EvaluationRunsHistory />} />
+          <Route path="/evaluation/datasets/:datasetId/runs/:runId" element={<EvaluationRunDetail />} />
           <Route path="/sessions/:sessionId/evaluation/datasets" element={<EvaluationDatasetList />} />
           <Route path="/reasoning-demo" element={<ReasoningFeedbackDemo />} />
           <Route path="/progress-demo" element={<ProgressVisualizationDemo />} />

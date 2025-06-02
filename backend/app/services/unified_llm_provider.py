@@ -677,8 +677,193 @@ Format your response as JSON with this structure:
 class MockProvider(BaseLLMProvider):
     """Mock provider for testing"""
     
-    async def generate(self, prompt: str, **kwargs) -> str:
-        return f"Mock response to: {prompt[:50]}..."
+    async def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+        # Generate more realistic responses for evaluation testing
+        if system_prompt and "email assistant" in system_prompt.lower():
+            return self._generate_mock_email_response(prompt, system_prompt)
+        elif "email" in prompt.lower() or "subject:" in prompt.lower():
+            return self._generate_mock_email_response(prompt, system_prompt)
+        else:
+            return f"Mock response to: {prompt[:50]}..."
+    
+    def _generate_mock_email_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """Generate a realistic mock email response"""
+        import random
+        
+        # Extract key information from the prompt
+        prompt_lower = prompt.lower()
+        
+        # Determine email type and generate appropriate response
+        if "shipping" in prompt_lower or "address" in prompt_lower:
+            responses = [
+                """<improved_email>
+Subject: Re: Update Shipping Address for Recent Order
+
+Dear Lisa Wang,
+
+Thank you for reaching out regarding your recent order. I'd be happy to help you update your shipping address.
+
+To process this change, I'll need your order number and the new shipping address. Please note that if your order has already been shipped, we may need to contact our carrier to redirect the package.
+
+Could you please provide:
+- Your order number
+- The updated shipping address
+- Your preferred delivery date if you have one
+
+I'll process this update immediately once I receive this information.
+
+Best regards,
+Customer Service Team
+</improved_email>""",
+                """<improved_email>
+Subject: Shipping Address Update Confirmation
+
+Dear Lisa Wang,
+
+Thank you for contacting us about updating your shipping address for your recent order.
+
+I've successfully updated your shipping address in our system. Your order will now be delivered to the new address you provided.
+
+You can expect delivery within 3-5 business days. You'll receive a tracking confirmation email once your order ships.
+
+If you have any other questions, please don't hesitate to reach out.
+
+Warm regards,
+Customer Support
+</improved_email>"""
+            ]
+        elif "meeting" in prompt_lower or "schedule" in prompt_lower:
+            responses = [
+                """<improved_email>
+Subject: Re: Meeting Request
+
+Thank you for your email. I'd be happy to schedule a meeting with you.
+
+I have availability on the following dates and times:
+- Tuesday, June 4th at 2:00 PM
+- Wednesday, June 5th at 10:00 AM  
+- Friday, June 7th at 3:30 PM
+
+Please let me know which time works best for you, and I'll send a calendar invitation.
+
+Best regards,
+[Your Name]
+</improved_email>""",
+                """<improved_email>
+Subject: Meeting Confirmation
+
+Thank you for scheduling our meeting. I'm looking forward to our discussion.
+
+Meeting Details:
+- Date: Wednesday, June 5th
+- Time: 10:00 AM - 11:00 AM
+- Location: Conference Room B / Zoom (link to follow)
+
+I'll prepare an agenda and send it to you by tomorrow.
+
+Best regards,
+[Your Name]
+</improved_email>"""
+            ]
+        elif "project" in prompt_lower or "status" in prompt_lower or "update" in prompt_lower:
+            responses = [
+                """<improved_email>
+Subject: Project Status Update
+
+Thank you for requesting an update on the project status.
+
+Here's the current progress:
+- Phase 1: Completed (100%)
+- Phase 2: In progress (75% complete)
+- Phase 3: Scheduled to begin next week
+
+We're on track to meet our deadline of June 15th. I'll continue to provide weekly updates as we progress.
+
+Please let me know if you need any additional details.
+
+Best regards,
+[Your Name]
+</improved_email>""",
+                """<improved_email>
+Subject: Re: Project Status Update Required
+
+Dear [Name],
+
+Thank you for your inquiry about the project status. I'm pleased to provide you with the latest update.
+
+Current Status:
+✓ Requirements gathering: Complete
+✓ Design phase: Complete  
+• Development: 80% complete
+• Testing: Scheduled for next week
+• Deployment: On schedule for June 20th
+
+We're meeting all major milestones and remain on budget. I'll have a more detailed report ready for tomorrow's stakeholder meeting.
+
+Best regards,
+Project Manager
+</improved_email>"""
+            ]
+        elif "thank" in prompt_lower or "follow" in prompt_lower:
+            responses = [
+                """<improved_email>
+Subject: Thank You
+
+Thank you for your email and for taking the time to reach out.
+
+I appreciate your interest and will review your request carefully. I'll get back to you within 24 hours with a detailed response.
+
+In the meantime, please don't hesitate to contact me if you have any urgent questions.
+
+Best regards,
+[Your Name]
+</improved_email>""",
+                """<improved_email>
+Subject: Following Up
+
+Thank you for our conversation yesterday. I wanted to follow up on the points we discussed.
+
+As promised, I've attached the documents you requested. Please review them at your convenience and let me know if you have any questions.
+
+I look forward to hearing your thoughts and moving forward with our collaboration.
+
+Best regards,
+[Your Name]
+</improved_email>"""
+            ]
+        else:
+            # Generic professional email response
+            responses = [
+                """<improved_email>
+Subject: Re: Your Inquiry
+
+Thank you for your email. I've received your message and wanted to acknowledge it promptly.
+
+I'll review the details you've provided and get back to you with a comprehensive response within 24 hours.
+
+If you have any urgent questions in the meantime, please don't hesitate to contact me directly.
+
+Best regards,
+[Your Name]
+</improved_email>""",
+                """<improved_email>
+Subject: Response to Your Request
+
+Dear [Name],
+
+Thank you for reaching out. I appreciate you taking the time to contact us.
+
+I've noted your request and will ensure it receives proper attention. You can expect a detailed response from our team shortly.
+
+Please let me know if there's anything else I can assist you with.
+
+Warm regards,
+Customer Service Team
+</improved_email>"""
+            ]
+        
+        # Return a random response for variety
+        return random.choice(responses)
     
     async def generate_drafts(self, email_content: str, system_prompt: str, **kwargs) -> List[EmailDraft]:
         return [

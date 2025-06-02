@@ -227,3 +227,99 @@ class EvaluationDatasetStoryTests(TestCase):
         case_inputs = [c['input_text'] for c in response_data['cases']]
         self.assertIn('Test input 1', case_inputs)
         self.assertIn('Test input 2', case_inputs)
+    
+    def test_import_evaluation_cases_with_parameters(self):
+        """
+        Test: Import evaluation cases using parameter-based format
+        """
+        # Create a prompt lab with a template that has parameters
+        prompt_lab = PromptLab.objects.create(
+            name="Customer Service Bot",
+            description="Test prompt lab with parameters"
+        )
+        
+        # Create a system prompt with parameter placeholders
+        system_prompt = SystemPrompt.objects.create(
+            prompt_lab=prompt_lab,
+            content="You are a customer service assistant helping {{user_name}} with their {{issue_type}} regarding {{product}}. Please respond professionally.",
+            version=1,
+            is_active=True
+        )
+        
+        # Create evaluation dataset
+        dataset = EvaluationDataset.objects.create(
+            prompt_lab=prompt_lab,
+            name="Parameter-based Dataset"
+        )
+        
+        # Sample JSONL content with parameter-based format
+        jsonl_content = """{"parameters": {"user_name": "John Smith", "issue_type": "return policy", "product": "laptop"}, "expected_output": "Hi John Smith, our return policy allows returns within 30 days of purchase for laptops."}
+{"parameters": {"user_name": "Sarah Johnson", "issue_type": "order tracking", "order_id": "ORD-12345"}, "expected_output": "Hello Sarah Johnson, you can track order ORD-12345 using the link in your confirmation email."}
+{"parameters": {"user_name": "Mike Chen", "issue_type": "cancellation", "product": "smartphone"}, "expected_output": "Hi Mike Chen, I can help you cancel your smartphone order within 2 hours of placement."}"""
+        
+        url = f'/api/evaluations/datasets/{dataset.id}/import/'
+        
+        # Simulate file upload
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        uploaded_file = SimpleUploadedFile(
+            "test_cases.jsonl",
+            jsonl_content.encode('utf-8'),
+            content_type="application/json"
+        )
+        
+        response = self.client.post(url, {'file': uploaded_file}, format='multipart')
+        
+        # Should get 200 OK
+        self.assertEqual(response.status_code, 200)
+        
+        # Check response data
+        response_data = response.json()
+        imported_cases = response_data.get('imported_count', 0)
+        
+        # Check that 3 cases were imported
+        self.assertEqual(imported_cases, 3)
+        
+        # Verify cases were actually created in database
+        cases = EvaluationCase.objects.filter(dataset=dataset)
+        self.assertEqual(cases.count(), 3)
+        
+        # Verify parameter substitution worked correctly
+        case_1 = cases.filter(context__user_name="John Smith").first()
+        self.assertIsNotNone(case_1)
+        self.assertIn("John Smith", case_1.input_text)
+        self.assertIn("return policy", case_1.input_text)
+        self.assertIn("laptop", case_1.input_text)
+        
+        # Verify parameters are stored in context
+        self.assertEqual(case_1.context['user_name'], "John Smith")
+        self.assertEqual(case_1.context['issue_type'], "return policy")
+        self.assertEqual(case_1.context['product'], "laptop")
+        
+        # Test case without active prompt (fallback behavior)
+        system_prompt.is_active = False
+        system_prompt.save()
+        
+        # Create another dataset
+        dataset_2 = EvaluationDataset.objects.create(
+            prompt_lab=prompt_lab,
+            name="Fallback Dataset"
+        )
+        
+        fallback_content = """{"parameters": {"user_name": "Test User", "issue": "general inquiry"}, "expected_output": "Thank you for your inquiry."}"""
+        
+        uploaded_file_2 = SimpleUploadedFile(
+            "fallback_cases.jsonl",
+            fallback_content.encode('utf-8'),
+            content_type="application/json"
+        )
+        
+        url_2 = f'/api/evaluations/datasets/{dataset_2.id}/import/'
+        response_2 = self.client.post(url_2, {'file': uploaded_file_2}, format='multipart')
+        
+        self.assertEqual(response_2.status_code, 200)
+        
+        # Verify fallback case creation
+        fallback_case = EvaluationCase.objects.filter(dataset=dataset_2).first()
+        self.assertIsNotNone(fallback_case)
+        self.assertIn("User Name: Test User", fallback_case.input_text)
+        self.assertIn("Issue: general inquiry", fallback_case.input_text)
