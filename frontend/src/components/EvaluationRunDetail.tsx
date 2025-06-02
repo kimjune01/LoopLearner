@@ -314,7 +314,9 @@ const EvaluationRunDetail: React.FC = () => {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
                 <div>
-                  <h3 className="text-lg font-medium text-blue-900">Evaluation Running</h3>
+                  <h3 className="text-lg font-medium text-blue-900">
+                    {runDetail.status === 'pending' ? 'Evaluation Starting...' : 'Evaluation Running'}
+                  </h3>
                   <p className="text-sm text-blue-700">
                     Processing {runDetail.statistics?.total_cases || 0} evaluation cases...
                   </p>
@@ -326,42 +328,69 @@ const EvaluationRunDetail: React.FC = () => {
               </div>
             </div>
             
-            {modelInfo && (
-              <div className="mt-4 pt-4 border-t border-blue-200">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium text-blue-800">Provider:</span>
-                    <div className="text-blue-900">{modelInfo.provider}</div>
-                  </div>
-                  <div>
-                    <span className="font-medium text-blue-800">Model:</span>
-                    <div className="text-blue-900">{modelInfo.model}</div>
-                  </div>
-                  <div>
-                    <span className="font-medium text-blue-800">Dataset:</span>
-                    <div className="text-blue-900">{runDetail.dataset_name}</div>
-                  </div>
-                  <div>
-                    <span className="font-medium text-blue-800">Progress:</span>
-                    <div className="text-blue-900">
-                      {runDetail.results.length} / {runDetail.statistics?.total_cases || 0} cases
+            {(() => {
+              const completedCases = runDetail.results.length;
+              const totalCases = runDetail.statistics?.total_cases || 0;
+              const progressPercent = totalCases > 0 ? (completedCases / totalCases) * 100 : 0;
+              
+              return (
+                <>
+                  {modelInfo && (
+                    <div className="mt-4 pt-4 border-t border-blue-200">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="font-medium text-blue-800">Provider:</span>
+                          <div className="text-blue-900">{modelInfo.provider}</div>
+                        </div>
+                        <div>
+                          <span className="font-medium text-blue-800">Model:</span>
+                          <div className="text-blue-900">{modelInfo.model}</div>
+                        </div>
+                        <div>
+                          <span className="font-medium text-blue-800">Dataset:</span>
+                          <div className="text-blue-900">{runDetail.dataset_name}</div>
+                        </div>
+                        <div>
+                          <span className="font-medium text-blue-800">Progress:</span>
+                          <div className="text-blue-900">
+                            {completedCases} / {totalCases} cases ({progressPercent.toFixed(0)}%)
+                          </div>
+                        </div>
+                      </div>
                     </div>
+                  )}
+                  
+                  {/* Progress Bar with completion details */}
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-blue-800">
+                        {totalCases === 0 ? 'Initializing...' : 
+                         completedCases === 0 ? 'Starting evaluation...' :
+                         `${completedCases} of ${totalCases} cases completed`}
+                      </span>
+                      <span className="text-sm text-blue-700">
+                        {progressPercent.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-blue-200 rounded-full h-3">
+                      <div
+                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
+                        style={{ 
+                          width: `${Math.max(progressPercent, totalCases === 0 ? 5 : 0)}%` 
+                        }}
+                      />
+                    </div>
+                    {totalCases > 0 && (
+                      <div className="mt-2 text-xs text-blue-600">
+                        {completedCases === 0 ? 'Waiting for first results...' :
+                         completedCases < totalCases ? `${totalCases - completedCases} cases remaining` :
+                         'Finalizing results...'}
+                      </div>
+                    )}
                   </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Progress Bar */}
-            <div className="mt-4">
-              <div className="w-full bg-blue-200 rounded-full h-2">
-                <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                  style={{ 
-                    width: `${(runDetail.results.length / (runDetail.statistics?.total_cases || 1)) * 100}%` 
-                  }}
-                />
-              </div>
-            </div>
+                </>
+              );
+            })()}
           </div>
         )}
 

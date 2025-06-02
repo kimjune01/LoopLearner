@@ -10,6 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.shortcuts import get_object_or_404
 from django.db import models
+from django.utils import timezone
 from core.models import PromptLab, EvaluationDataset, EvaluationCase, SystemPrompt, DraftCase
 from app.services.evaluation_case_generator import EvaluationCaseGenerator
 from app.services.evaluation_dataset_migrator import EvaluationDatasetMigrator
@@ -921,7 +922,7 @@ class EvaluationRunTriggerView(View):
             dataset = get_object_or_404(EvaluationDataset, id=dataset_id)
             prompt = get_object_or_404(SystemPrompt, id=prompt_id)
             
-            # Execute evaluation
+            # Create evaluation engine
             from app.services.evaluation_engine import EvaluationEngine
             from app.services.unified_llm_provider import LLMProviderFactory, LLMConfig
             from app.services.reward_aggregator import RewardFunctionAggregator
@@ -934,18 +935,33 @@ class EvaluationRunTriggerView(View):
             
             engine = EvaluationEngine(llm_provider, reward_aggregator)
             
-            # Create and execute run
+            # Create run immediately and return ID
             run = engine.create_evaluation_run(dataset, prompt)
-            results = engine.execute_evaluation_run(run)
             
+            # Start execution in background thread
+            import threading
+            def run_evaluation_background():
+                try:
+                    engine.execute_evaluation_run(run)
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Background evaluation execution failed: {str(e)}")
+                    # Mark run as failed
+                    run.status = 'failed'
+                    run.completed_at = timezone.now()
+                    run.save()
+            
+            thread = threading.Thread(target=run_evaluation_background)
+            thread.start()
+            
+            # Return immediately with run ID
             return JsonResponse({
                 'run_id': run.id,
-                'status': run.status,
-                'overall_score': run.overall_score,
-                'total_cases': len(results),
-                'passed_cases': sum(1 for r in results if r.passed),
-                'started_at': run.started_at.isoformat(),
-                'completed_at': run.completed_at.isoformat() if run.completed_at else None
+                'status': 'pending',
+                'dataset_id': dataset.id,
+                'prompt_id': prompt.id,
+                'started_at': run.started_at.isoformat()
             }, status=201)
             
         except Exception as e:
