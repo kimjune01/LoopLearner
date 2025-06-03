@@ -4,6 +4,7 @@ import type { PromptLab } from '../types/promptLab';
 import type { EvaluationDataset } from '../types/evaluation';
 import { promptLabService } from '../services/promptLabService';
 import { evaluationService } from '../services/evaluationService';
+import { optimizationService } from '../services/optimizationService';
 import { generateDatasetNameAndDescription } from '../utils/nameGenerator';
 import { PromptEditor } from './PromptEditor';
 import PromptLabProgressVisualization from './PromptLabProgressVisualization';
@@ -27,6 +28,12 @@ export const PromptLabDetail: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [filterByParams, setFilterByParams] = useState(true);
+  
+  // Optimization state
+  const [selectedDatasetIds, setSelectedDatasetIds] = useState<number[]>([]);
+  const [optimizationLoading, setOptimizationLoading] = useState(false);
+  const [optimizationResult, setOptimizationResult] = useState<string | null>(null);
+  
   const navigate = useNavigate();
 
   // Function to highlight parameters in prompt content
@@ -271,6 +278,56 @@ ${promptLab.active_prompt.content}
       console.error('Error deleting dataset:', err);
     }
   };
+
+  // Optimization functions
+  const handleDatasetSelection = (datasetId: number, selected: boolean) => {
+    setSelectedDatasetIds(prev => 
+      selected 
+        ? [...prev, datasetId]
+        : prev.filter(id => id !== datasetId)
+    );
+  };
+
+  const handleSelectAllDatasets = () => {
+    const allFilteredIds = filteredDatasets.map(d => d.id);
+    setSelectedDatasetIds(
+      selectedDatasetIds.length === allFilteredIds.length ? [] : allFilteredIds
+    );
+  };
+
+  const handleTriggerOptimization = async () => {
+    if (!id || selectedDatasetIds.length === 0) return;
+
+    setOptimizationLoading(true);
+    setOptimizationResult(null);
+
+    try {
+      const result = await optimizationService.triggerOptimizationWithDatasets({
+        prompt_lab_id: id,
+        dataset_ids: selectedDatasetIds,
+        force: false
+      });
+
+      // Navigate immediately to the optimization run detail page
+      if (result.run_id || result.optimization_id) {
+        const runId = result.run_id || result.optimization_id;
+        navigate(`/prompt-labs/${id}/optimization/runs/${runId}`);
+      } else {
+        // Fallback for old API response format
+        setOptimizationResult(`Optimization completed! ${result.message}`);
+        setSelectedDatasetIds([]); // Clear selection after successful optimization
+        
+        // Reload prompt lab to show updated prompt
+        await loadPromptLab();
+      }
+    } catch (err: any) {
+      console.error('Optimization error:', err);
+      const errorMessage = err.message || 'Optimization failed. Please try again.';
+      setOptimizationResult(`Optimization failed: ${errorMessage}`);
+    } finally {
+      setOptimizationLoading(false);
+    }
+  };
   
   const filteredDatasets = datasets.filter(dataset =>
     dataset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -443,14 +500,6 @@ ${promptLab.active_prompt.content}
               <>
                 {/* Current System Prompt - Most Prominent Section */}
                 <div className="mb-12">
-              <div className="text-center mb-8">
-                <h2 className="text-4xl font-bold text-gray-900 mb-3 bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                  Current System Prompt
-                </h2>
-                <p className="text-gray-600 text-lg">
-                  The evolving intelligence guiding this prompt lab
-                </p>
-              </div>
               
               <div className="card-elevated p-8 mb-6">
                 {promptLab.active_prompt?.content ? (
@@ -848,6 +897,67 @@ ${promptLab.active_prompt.content}
                   </div>
                 </div>
 
+                {/* Optimization Controls */}
+                <div className="mb-6 rounded-lg bg-gradient-to-r from-purple-50 to-indigo-50 p-6 border border-purple-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                        <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Dataset-Based Optimization
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Select datasets to optimize your prompt against specific evaluation criteria
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      {filteredDatasets.length > 0 && (
+                        <button
+                          onClick={handleSelectAllDatasets}
+                          className="text-sm text-purple-600 hover:text-purple-800 font-medium"
+                        >
+                          {selectedDatasetIds.length === filteredDatasets.length ? 'Deselect All' : 'Select All'}
+                        </button>
+                      )}
+                      <button
+                        onClick={handleTriggerOptimization}
+                        disabled={selectedDatasetIds.length === 0 || optimizationLoading}
+                        className={`btn-primary flex items-center space-x-2 ${
+                          selectedDatasetIds.length === 0 || optimizationLoading
+                            ? 'opacity-50 cursor-not-allowed'
+                            : ''
+                        }`}
+                      >
+                        {optimizationLoading ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            <span>Optimizing...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            <span>Optimize with Selected ({selectedDatasetIds.length})</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Optimization Result */}
+                  {optimizationResult && (
+                    <div className={`mt-4 rounded-md p-4 ${
+                      optimizationResult.includes('failed') 
+                        ? 'bg-red-50 text-red-800 border border-red-200' 
+                        : 'bg-green-50 text-green-800 border border-green-200'
+                    }`}>
+                      <p className="text-sm font-medium">{optimizationResult}</p>
+                    </div>
+                  )}
+                </div>
+
                 {/* Dataset Grid */}
                 {datasetsLoading ? (
                   <div className="flex items-center justify-center py-12">
@@ -881,6 +991,8 @@ ${promptLab.active_prompt.content}
                         dataset={dataset}
                         onDelete={() => handleDeleteDataset(dataset.id)}
                         onClick={() => navigate(`/evaluation/datasets/${dataset.id}`)}
+                        selected={selectedDatasetIds.includes(dataset.id)}
+                        onSelectionChange={(selected) => handleDatasetSelection(dataset.id, selected)}
                       />
                     ))}
                   </div>
@@ -924,12 +1036,27 @@ interface DatasetCardProps {
   dataset: EvaluationDataset;
   onClick: () => void;
   onDelete: () => void;
+  selected: boolean;
+  onSelectionChange: (selected: boolean) => void;
 }
 
-const DatasetCard: React.FC<DatasetCardProps> = ({ dataset, onClick, onDelete }) => {
+const DatasetCard: React.FC<DatasetCardProps> = ({ dataset, onClick, onDelete, selected, onSelectionChange }) => {
   return (
-    <div className="card-elevated group cursor-pointer" onClick={onClick}>
-      <div className="p-6">
+    <div className={`card-elevated group relative ${selected ? 'ring-2 ring-purple-500 bg-purple-50' : ''}`}>
+      {/* Selection Checkbox */}
+      <div className="absolute top-4 left-4 z-10">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={(e) => {
+            e.stopPropagation();
+            onSelectionChange(e.target.checked);
+          }}
+          className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 w-4 h-4"
+        />
+      </div>
+
+      <div className="p-6 pl-12 cursor-pointer" onClick={onClick}>
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-gray-900 group-hover:text-purple-600">

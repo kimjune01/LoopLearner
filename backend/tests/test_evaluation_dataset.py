@@ -108,10 +108,21 @@ class EvaluationDatasetStoryTests(TestCase):
             name="Imported Dataset"
         )
         
-        # Sample JSONL content (3 test cases)
-        jsonl_content = """{"input": "What is your return policy?", "expected": "We accept returns within 30 days.", "context": {"type": "policy"}}
-{"input": "How do I track my order?", "expected": "You can track your order using the tracking number sent via email.", "context": {"type": "tracking"}}
-{"input": "Can I cancel my order?", "expected": "Orders can be cancelled within 2 hours of placement.", "context": {"type": "cancellation"}}"""
+        # Make sure any existing prompts are inactive
+        SystemPrompt.objects.filter(prompt_lab=self.prompt_lab).update(is_active=False)
+        
+        # Create a system prompt for parameter substitution
+        system_prompt = SystemPrompt.objects.create(
+            prompt_lab=self.prompt_lab,
+            content="You are a customer service assistant answering questions about {{question_type}}.",
+            version=2,  # Use version 2 to avoid conflicts
+            is_active=True
+        )
+        
+        # Sample JSONL content (3 test cases) using parameter format
+        jsonl_content = """{"parameters": {"question_type": "return policy"}, "expected_output": "We accept returns within 30 days."}
+{"parameters": {"question_type": "order tracking"}, "expected_output": "You can track your order using the tracking number sent via email."}
+{"parameters": {"question_type": "order cancellation"}, "expected_output": "Orders can be cancelled within 2 hours of placement."}"""
         
         # This test should initially fail because we haven't implemented the API yet
         url = f'/api/evaluations/datasets/{dataset.id}/import/'
@@ -135,11 +146,12 @@ class EvaluationDatasetStoryTests(TestCase):
         cases = EvaluationCase.objects.filter(dataset=dataset)
         self.assertEqual(cases.count(), 3)
         
-        # Verify first case
-        first_case = cases.filter(input_text="What is your return policy?").first()
+        # Verify first case - check that parameters were substituted
+        first_case = cases.filter(context__question_type="return policy").first()
         self.assertIsNotNone(first_case)
+        self.assertIn("return policy", first_case.input_text)
         self.assertEqual(first_case.expected_output, "We accept returns within 30 days.")
-        self.assertEqual(first_case.context['type'], 'policy')
+        self.assertEqual(first_case.context['question_type'], 'return policy')
         
         # Verify response data
         response_data = response.json()

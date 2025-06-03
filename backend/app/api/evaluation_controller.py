@@ -11,6 +11,9 @@ from django.utils.decorators import method_decorator
 from django.shortcuts import get_object_or_404
 from django.db import models
 from django.utils import timezone
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
 from core.models import PromptLab, EvaluationDataset, EvaluationCase, SystemPrompt, DraftCase
 from app.services.evaluation_case_generator import EvaluationCaseGenerator
 from app.services.evaluation_dataset_migrator import EvaluationDatasetMigrator
@@ -373,49 +376,40 @@ class EvaluationDatasetImportView(View):
                 if line.strip():  # Skip empty lines
                     case_data = json.loads(line)
                     
-                    # Check for parameter-based format
-                    if 'parameters' in case_data:
-                        # New format: parameters + expected_output
-                        parameters = case_data.get('parameters', {})
-                        expected_output = case_data.get('expected_output') or case_data.get('expected')
+                    # Only support parameter-based format
+                    parameters = case_data.get('parameters', {})
+                    expected_output = case_data.get('expected_output')
+                    
+                    if not parameters:
+                        # Skip lines without parameters
+                        continue
                         
-                        if parameters and expected_output:
-                            try:
-                                # Get the prompt template to substitute parameters
-                                prompt_lab = dataset.prompt_lab
-                                current_prompt = prompt_lab.prompts.filter(is_active=True).first()
-                                
-                                if current_prompt:
-                                    # Substitute parameters into the prompt template
-                                    input_text = self._substitute_parameters(current_prompt.content, parameters)
-                                else:
-                                    # Fallback: create a basic template from parameters
-                                    input_text = self._create_input_from_parameters(parameters)
-                                
-                                EvaluationCase.objects.create(
-                                    dataset=dataset,
-                                    input_text=input_text,
-                                    expected_output=expected_output,
-                                    context=parameters  # Store parameters in context
-                                )
-                                imported_count += 1
-                            except Exception as e:
-                                # Log the error but continue processing other cases
-                                continue
-                    else:
-                        # Legacy format: direct input_text + expected_output
-                        input_text = case_data.get('input') or case_data.get('input_text')
-                        expected_output = case_data.get('expected') or case_data.get('expected_output')
-                        context = case_data.get('context', {})
+                    if not expected_output:
+                        # Skip lines without expected output
+                        continue
+                    
+                    try:
+                        # Get the prompt template to substitute parameters
+                        prompt_lab = dataset.prompt_lab
+                        current_prompt = prompt_lab.prompts.filter(is_active=True).first()
                         
-                        if input_text and expected_output:
-                            EvaluationCase.objects.create(
-                                dataset=dataset,
-                                input_text=input_text,
-                                expected_output=expected_output,
-                                context=context
-                            )
-                            imported_count += 1
+                        if current_prompt:
+                            # Substitute parameters into the prompt template
+                            input_text = self._substitute_parameters(current_prompt.content, parameters)
+                        else:
+                            # Fallback: create a basic template from parameters
+                            input_text = self._create_input_from_parameters(parameters)
+                        
+                        EvaluationCase.objects.create(
+                            dataset=dataset,
+                            input_text=input_text,
+                            expected_output=expected_output,
+                            context=parameters  # Store parameters in context
+                        )
+                        imported_count += 1
+                    except Exception as e:
+                        # Log the error but continue processing other cases
+                        continue
             
             return JsonResponse({
                 'imported_count': imported_count,
@@ -1534,3 +1528,39 @@ class EvaluationDraftStatusView(View):
                 })
         
         return JsonResponse(status_summary)
+
+
+class EvaluationOptimizationDatasetsView(APIView):
+    """Get evaluation datasets available for optimization"""
+    
+    def get(self, request, prompt_lab_id):
+        """Get datasets that can be used for optimization"""
+        try:
+            # Verify prompt lab exists
+            prompt_lab = PromptLab.objects.get(id=prompt_lab_id)
+            
+            # Get datasets with cases
+            datasets = EvaluationDataset.objects.filter(
+                prompt_lab_id=prompt_lab_id,
+                case_count__gt=0
+            ).order_by('-quality_score', '-human_reviewed_count', 'name')
+            
+            # Serialize datasets
+            dataset_data = []
+            for dataset in datasets:
+                dataset_data.append({
+                    'id': dataset.id,
+                    'name': dataset.name,
+                    'description': dataset.description,
+                    'case_count': dataset.case_count,
+                    'parameters': dataset.parameters,
+                    'human_reviewed': dataset.human_reviewed_count > 0,
+                    'quality_score': dataset.quality_score
+                })
+            
+            return Response(dataset_data)
+            
+        except PromptLab.DoesNotExist:
+            return Response({
+                'detail': 'Prompt lab not found'
+            }, status=status.HTTP_404_NOT_FOUND)

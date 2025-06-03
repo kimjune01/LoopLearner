@@ -200,17 +200,38 @@ class OptimizationRun(models.Model):
         ('failed', 'Failed'),
     ]
     
-    old_prompt = models.ForeignKey(SystemPrompt, on_delete=models.CASCADE, related_name='optimization_runs_old')
-    new_prompt = models.ForeignKey(SystemPrompt, on_delete=models.CASCADE, related_name='optimization_runs_new', null=True, blank=True)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    prompt_lab = models.ForeignKey(PromptLab, on_delete=models.CASCADE, related_name='optimization_runs', null=True, blank=True)
+    baseline_prompt = models.ForeignKey(SystemPrompt, on_delete=models.CASCADE, related_name='optimization_runs_baseline', null=True, blank=True)
+    optimized_prompt = models.ForeignKey(SystemPrompt, on_delete=models.CASCADE, related_name='optimization_runs_optimized', null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    feedback_count = models.IntegerField(default=0)  # Number of feedback items used
-    performance_improvement = models.FloatField(null=True, blank=True)
+    
+    # Dataset-based optimization fields
+    datasets_used = models.JSONField(default=list, blank=True)  # List of dataset IDs used
+    test_cases_used = models.IntegerField(default=0)
+    
+    # Performance tracking
+    performance_improvement = models.FloatField(null=True, blank=True)  # Percentage improvement
+    deployed = models.BooleanField(default=False)  # Whether the optimized prompt was deployed
+    
+    # Metadata
     error_message = models.TextField(blank=True)
     started_at = models.DateTimeField(default=timezone.now)
     completed_at = models.DateTimeField(null=True, blank=True)
+    evaluation_results = models.JSONField(default=dict, blank=True)  # Detailed evaluation results
+    
+    # Legacy fields for backward compatibility
+    old_prompt = models.ForeignKey(SystemPrompt, on_delete=models.CASCADE, related_name='optimization_runs_old', null=True, blank=True)
+    new_prompt = models.ForeignKey(SystemPrompt, on_delete=models.CASCADE, related_name='optimization_runs_new', null=True, blank=True)
+    feedback_count = models.IntegerField(default=0)  # Number of feedback items used
+    
+    class Meta:
+        ordering = ['-started_at']
     
     def __str__(self):
-        return f"Optimization: v{self.old_prompt.version} -> v{getattr(self.new_prompt, 'version', '?')} ({self.status})"
+        if self.optimized_prompt:
+            return f"Optimization: v{self.baseline_prompt.version} -> v{self.optimized_prompt.version} ({self.status})"
+        return f"Optimization: v{self.baseline_prompt.version} -> ? ({self.status})"
 
 
 class EvaluationDataset(models.Model):
@@ -220,6 +241,9 @@ class EvaluationDataset(models.Model):
     description = models.TextField(blank=True)
     parameters = models.JSONField(default=list, blank=True)  # List of parameter names
     parameter_descriptions = models.JSONField(default=dict, blank=True)  # Parameter descriptions
+    case_count = models.IntegerField(default=0, help_text='Number of evaluation cases in this dataset')
+    quality_score = models.FloatField(default=0.5, help_text='Quality score between 0 and 1')
+    human_reviewed_count = models.IntegerField(default=0, help_text='Number of human-reviewed cases')
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     

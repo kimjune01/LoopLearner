@@ -9,6 +9,7 @@ import EvaluationDatasetDetail from './components/EvaluationDatasetDetail'
 import EvaluationRun from './components/EvaluationRun'
 import EvaluationRunsHistory from './components/EvaluationRunsHistory'
 import EvaluationRunDetail from './components/EvaluationRunDetail'
+import OptimizationRunDetail from './components/OptimizationRunDetail'
 import ReasoningFeedbackDemo from './components/ReasoningFeedbackDemo'
 import ProgressVisualizationDemo from './components/ProgressVisualizationDemo'
 
@@ -130,6 +131,7 @@ function App() {
           <Route path="/evaluation/datasets/:datasetId/run" element={<EvaluationRun />} />
           <Route path="/evaluation/datasets/:datasetId/runs" element={<EvaluationRunsHistory />} />
           <Route path="/evaluation/datasets/:datasetId/runs/:runId" element={<EvaluationRunDetail />} />
+          <Route path="/prompt-labs/:promptLabId/optimization/runs/:runId" element={<OptimizationRunDetail />} />
           <Route path="/sessions/:sessionId/evaluation/datasets" element={<EvaluationDatasetList />} />
           <Route path="/reasoning-demo" element={<ReasoningFeedbackDemo />} />
           <Route path="/progress-demo" element={<ProgressVisualizationDemo />} />

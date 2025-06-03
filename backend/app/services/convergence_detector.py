@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.db.models import Avg, Count, Q
-from core.models import Session, SystemPrompt, UserFeedback, PromptLabConfidence
+from core.models import PromptLab, SystemPrompt, UserFeedback
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class ConvergenceDetector:
     def __init__(self):
         self.logger = logger
     
-    def assess_convergence(self, session: Session) -> Dict[str, Any]:
+    def assess_convergence(self, prompt_lab: PromptLab) -> Dict[str, Any]:
         """Comprehensive convergence assessment combining all factors"""
         try:
             # Import compute optimizer for cost-aware decisions
@@ -39,13 +39,13 @@ class ConvergenceDetector:
             compute_optimizer = ComputeOptimizer()
             
             # Check hard iteration limit first (failsafe)
-            if session.optimization_iterations >= self.MAX_ITERATIONS_HARD_LIMIT:
+            if prompt_lab.optimization_iterations >= self.MAX_ITERATIONS_HARD_LIMIT:
                 return {
                     'converged': True,
                     'confidence_score': 1.0,
                     'factors': {
                         'hard_limit_reached': True,
-                        'iterations': session.optimization_iterations,
+                        'iterations': prompt_lab.optimization_iterations,
                         'limit': self.MAX_ITERATIONS_HARD_LIMIT
                     },
                     'recommendations': [{
@@ -58,7 +58,7 @@ class ConvergenceDetector:
                 }
             
             # Check if we should even run convergence check (save compute)
-            optimization_decision = compute_optimizer.should_continue_optimization(session)
+            optimization_decision = compute_optimizer.should_continue_optimization(prompt_lab)
             if not optimization_decision.get('continue', True):
                 # Force convergence if compute costs too high
                 return {
@@ -78,14 +78,14 @@ class ConvergenceDetector:
                 }
             
             # Check all convergence factors
-            performance_plateau = self.detect_performance_plateau(session)
-            confidence_convergence = self.check_confidence_convergence(session)
-            feedback_stability = self.detect_feedback_stability(session)
-            minimum_iterations = self._check_minimum_iterations(session)
-            minimum_feedback = self._check_minimum_feedback(session)
+            performance_plateau = self.detect_performance_plateau(prompt_lab)
+            confidence_convergence = self.check_confidence_convergence(prompt_lab)
+            feedback_stability = self.detect_feedback_stability(prompt_lab)
+            minimum_iterations = self._check_minimum_iterations(prompt_lab)
+            minimum_feedback = self._check_minimum_feedback(prompt_lab)
             
             # Check for negative trends (early exit if performance declining)
-            negative_trend = self._check_negative_performance_trend(session)
+            negative_trend = self._check_negative_performance_trend(prompt_lab)
             if negative_trend:
                 return {
                     'converged': True,
@@ -121,10 +121,10 @@ class ConvergenceDetector:
             prerequisites_met = minimum_iterations and minimum_feedback
             
             converged = key_factors_met and prerequisites_met
-            confidence_score = self.calculate_convergence_confidence(session)
+            confidence_score = self.calculate_convergence_confidence(prompt_lab)
             
             # Generate recommendations based on current state
-            recommendations = self.generate_recommendations(session, factors, converged)
+            recommendations = self.generate_recommendations(prompt_lab, factors, converged)
             
             return {
                 'converged': converged,
@@ -135,7 +135,7 @@ class ConvergenceDetector:
             }
             
         except Exception as e:
-            self.logger.error(f"Error assessing convergence for session {session.id}: {str(e)}")
+            self.logger.error(f"Error assessing convergence for prompt lab {prompt_lab.id}: {str(e)}")
             return {
                 'converged': False,
                 'confidence_score': 0.0,
@@ -144,12 +144,12 @@ class ConvergenceDetector:
                 'error': str(e)
             }
     
-    def detect_performance_plateau(self, session: Session) -> bool:
+    def detect_performance_plateau(self, prompt_lab: PromptLab) -> bool:
         """Detect if performance has plateaued (no significant improvement)"""
         try:
             # Get recent prompt performance scores
             recent_prompts = SystemPrompt.objects.filter(
-                session=session,
+                prompt_lab=prompt_lab,
                 performance_score__isnull=False
             ).order_by('-version')[:self.PERFORMANCE_WINDOW_SIZE]
             
@@ -162,7 +162,7 @@ class ConvergenceDetector:
                 return False
             
             # Use progressive thresholds based on iteration count
-            threshold = self._get_progressive_threshold(session)
+            threshold = self._get_progressive_threshold(prompt_lab)
             
             # Check if performance improvement is minimal
             max_score = max(scores)
@@ -180,7 +180,7 @@ class ConvergenceDetector:
                 improvement < threshold
             )
             
-            self.logger.info(f"Performance plateau check for session {session.id}: "
+            self.logger.info(f"Performance plateau check for prompt lab {prompt_lab.id}: "
                            f"range={performance_range:.3f}, improvement={improvement:.3f}, "
                            f"threshold={threshold:.3f}, plateau={plateau_detected}")
             
@@ -190,9 +190,9 @@ class ConvergenceDetector:
             self.logger.error(f"Error detecting performance plateau: {str(e)}")
             return False
     
-    def _get_progressive_threshold(self, session: Session) -> float:
+    def _get_progressive_threshold(self, prompt_lab: PromptLab) -> float:
         """Get performance threshold based on optimization stage"""
-        iterations = session.optimization_iterations
+        iterations = prompt_lab.optimization_iterations
         
         if iterations < 5:
             # Early stage: allow 10% improvement
@@ -207,34 +207,23 @@ class ConvergenceDetector:
             # Diminishing returns: require only 1% improvement
             return 0.01
     
-    def check_confidence_convergence(self, session: Session) -> bool:
+    def check_confidence_convergence(self, prompt_lab: PromptLab) -> bool:
         """Check if confidence metrics indicate convergence"""
         try:
-            # Get latest confidence tracker
-            confidence_tracker = PromptLabConfidence.objects.filter(session=session).first()
-            
-            if not confidence_tracker:
-                return False  # No confidence data yet
-            
-            # Check if confidence thresholds are met
-            confidence_converged = confidence_tracker.is_learning_sufficient()
-            
-            # Also check confidence trend - should be stable (low positive trend)
-            trend_stable = abs(confidence_tracker.confidence_trend) < 0.05  # Less than 5% change
-            
-            # High confidence with stable trend indicates convergence
-            return confidence_converged and trend_stable
+            # For now, return False since PromptLabConfidence model doesn't exist yet
+            # This can be implemented later when confidence tracking is added
+            return False
             
         except Exception as e:
             self.logger.error(f"Error checking confidence convergence: {str(e)}")
             return False
     
-    def detect_feedback_stability(self, session: Session) -> bool:
+    def detect_feedback_stability(self, prompt_lab: PromptLab) -> bool:
         """Detect if user feedback patterns have stabilized"""
         try:
             # Get recent feedback
             recent_feedback = UserFeedback.objects.filter(
-                draft__email__session=session
+                draft__email__prompt_lab=prompt_lab
             ).order_by('-created_at')[:self.FEEDBACK_STABILITY_WINDOW]
             
             if recent_feedback.count() < self.FEEDBACK_STABILITY_WINDOW:
@@ -261,7 +250,7 @@ class ConvergenceDetector:
                 accept_ratio >= 0.7  # 70% acceptance rate
             )
             
-            self.logger.info(f"Feedback stability check for session {session.id}: "
+            self.logger.info(f"Feedback stability check for prompt lab {prompt_lab.id}: "
                            f"consistency={consistency_ratio:.3f}, acceptance={accept_ratio:.3f}, "
                            f"stable={stability_detected}")
             
@@ -271,7 +260,7 @@ class ConvergenceDetector:
             self.logger.error(f"Error detecting feedback stability: {str(e)}")
             return False
     
-    def check_early_stopping_criteria(self, session: Session) -> bool:
+    def check_early_stopping_criteria(self, prompt_lab: PromptLab) -> bool:
         """Check if early stopping conditions are met (shouldn't stop early)"""
         try:
             # Early stopping should NOT happen if:
@@ -279,12 +268,12 @@ class ConvergenceDetector:
             # 2. Not enough feedback
             # 3. Recent negative trend
             
-            insufficient_iterations = session.optimization_iterations < self.MINIMUM_ITERATIONS
-            insufficient_feedback = session.total_feedback_collected < self.MINIMUM_FEEDBACK_COUNT
+            insufficient_iterations = prompt_lab.optimization_iterations < self.MINIMUM_ITERATIONS
+            insufficient_feedback = prompt_lab.total_feedback_collected < self.MINIMUM_FEEDBACK_COUNT
             
             # Check for recent negative performance trend
             recent_prompts = SystemPrompt.objects.filter(
-                session=session,
+                prompt_lab=prompt_lab,
                 performance_score__isnull=False
             ).order_by('-version')[:3]
             
@@ -304,32 +293,32 @@ class ConvergenceDetector:
             self.logger.error(f"Error checking early stopping criteria: {str(e)}")
             return False
     
-    def calculate_convergence_confidence(self, session: Session) -> float:
+    def calculate_convergence_confidence(self, prompt_lab: PromptLab) -> float:
         """Calculate confidence score for convergence decision"""
         try:
             confidence_factors = []
             
             # Factor 1: Performance stability
-            if self.detect_performance_plateau(session):
+            if self.detect_performance_plateau(prompt_lab):
                 confidence_factors.append(0.3)  # 30% weight
             else:
                 confidence_factors.append(0.0)
             
             # Factor 2: Confidence metrics
-            if self.check_confidence_convergence(session):
+            if self.check_confidence_convergence(prompt_lab):
                 confidence_factors.append(0.3)  # 30% weight
             else:
                 confidence_factors.append(0.0)
             
             # Factor 3: Feedback stability
-            if self.detect_feedback_stability(session):
+            if self.detect_feedback_stability(prompt_lab):
                 confidence_factors.append(0.25)  # 25% weight
             else:
                 confidence_factors.append(0.0)
             
             # Factor 4: Data sufficiency
-            iterations_factor = min(1.0, session.optimization_iterations / (self.MINIMUM_ITERATIONS * 2))
-            feedback_factor = min(1.0, session.total_feedback_collected / (self.MINIMUM_FEEDBACK_COUNT * 2))
+            iterations_factor = min(1.0, prompt_lab.optimization_iterations / (self.MINIMUM_ITERATIONS * 2))
+            feedback_factor = min(1.0, prompt_lab.total_feedback_collected / (self.MINIMUM_FEEDBACK_COUNT * 2))
             data_sufficiency = (iterations_factor + feedback_factor) / 2
             confidence_factors.append(data_sufficiency * 0.15)  # 15% weight
             
@@ -342,13 +331,13 @@ class ConvergenceDetector:
             self.logger.error(f"Error calculating convergence confidence: {str(e)}")
             return 0.0
     
-    def generate_recommendations(self, session: Session, factors: Dict[str, bool], converged: bool) -> List[Dict[str, str]]:
+    def generate_recommendations(self, prompt_lab: PromptLab, factors: Dict[str, bool], converged: bool) -> List[Dict[str, str]]:
         """Generate actionable recommendations based on convergence state"""
         try:
             recommendations = []
             
             # Add compute-aware recommendations
-            iterations = session.optimization_iterations
+            iterations = prompt_lab.optimization_iterations
             
             if converged:
                 recommendations.append({
@@ -369,7 +358,7 @@ class ConvergenceDetector:
                     })
                 
                 recommendations.append({
-                    'action': 'archive_session',
+                    'action': 'archive_prompt_lab',
                     'reason': 'Session has reached optimal performance, consider archiving',
                     'priority': 'medium'
                 })
@@ -400,7 +389,7 @@ class ConvergenceDetector:
                 
                 if not factors.get('performance_plateau', False):
                     # Include current threshold in recommendation
-                    threshold = self._get_progressive_threshold(session)
+                    threshold = self._get_progressive_threshold(prompt_lab)
                     recommendations.append({
                         'action': 'monitor_performance',
                         'reason': f'Performance still improving - continue optimization (current threshold: {threshold:.1%})',
@@ -427,7 +416,7 @@ class ConvergenceDetector:
             self.logger.error(f"Error generating recommendations: {str(e)}")
             return []
     
-    def should_check_convergence(self, session: Session) -> bool:
+    def should_check_convergence(self, prompt_lab: PromptLab) -> bool:
         """Determine if convergence should be checked now"""
         try:
             # Check convergence if:
@@ -438,19 +427,19 @@ class ConvergenceDetector:
             # For now, simple implementation: check every optimization iteration
             # In production, could add more sophisticated timing logic
             
-            return session.optimization_iterations >= self.MINIMUM_ITERATIONS
+            return prompt_lab.optimization_iterations >= self.MINIMUM_ITERATIONS
             
         except Exception as e:
             self.logger.error(f"Error determining convergence check timing: {str(e)}")
             return False
     
-    def get_convergence_history(self, session: Session) -> List[Dict[str, Any]]:
-        """Get historical convergence assessments for a session"""
+    def get_convergence_history(self, prompt_lab: PromptLab) -> List[Dict[str, Any]]:
+        """Get historical convergence assessments for a prompt lab"""
         try:
             # For now, return current assessment as history
             # In production, could store historical assessments in database
             
-            current_assessment = self.assess_convergence(session)
+            current_assessment = self.assess_convergence(prompt_lab)
             
             return [{
                 'timestamp': current_assessment.get('assessment_timestamp'),
@@ -463,27 +452,27 @@ class ConvergenceDetector:
             self.logger.error(f"Error getting convergence history: {str(e)}")
             return []
     
-    def force_convergence(self, session: Session, reason: str, override_confidence: bool = False) -> Dict[str, Any]:
-        """Manually force convergence for a session"""
+    def force_convergence(self, prompt_lab: PromptLab, reason: str, override_confidence: bool = False) -> Dict[str, Any]:
+        """Manually force convergence for a prompt lab"""
         try:
             # Validate that forced convergence is appropriate
             if not override_confidence:
-                current_assessment = self.assess_convergence(session)
+                current_assessment = self.assess_convergence(prompt_lab)
                 if current_assessment.get('confidence_score', 0) < 0.5:
                     return {
                         'success': False,
                         'error': 'Convergence confidence too low for manual override without force flag'
                     }
             
-            # Mark session as manually converged
-            # This could update a session field or create a convergence record
+            # Mark prompt lab as manually converged
+            # This could update a prompt lab field or create a convergence record
             
             return {
                 'success': True,
                 'convergence_forced': True,
                 'reason': reason,
                 'timestamp': timezone.now().isoformat(),
-                'session_id': str(session.id)
+                'prompt_lab_id': str(prompt_lab.id)
             }
             
         except Exception as e:
@@ -493,20 +482,20 @@ class ConvergenceDetector:
                 'error': str(e)
             }
     
-    def _check_minimum_iterations(self, session: Session) -> bool:
+    def _check_minimum_iterations(self, prompt_lab: PromptLab) -> bool:
         """Check if minimum optimization iterations have been reached"""
-        return session.optimization_iterations >= self.MINIMUM_ITERATIONS
+        return prompt_lab.optimization_iterations >= self.MINIMUM_ITERATIONS
     
-    def _check_minimum_feedback(self, session: Session) -> bool:
+    def _check_minimum_feedback(self, prompt_lab: PromptLab) -> bool:
         """Check if minimum feedback count has been reached"""
-        return session.total_feedback_collected >= self.MINIMUM_FEEDBACK_COUNT
+        return prompt_lab.total_feedback_collected >= self.MINIMUM_FEEDBACK_COUNT
     
-    def _check_negative_performance_trend(self, session: Session) -> bool:
+    def _check_negative_performance_trend(self, prompt_lab: PromptLab) -> bool:
         """Check if performance is declining (early exit condition)"""
         try:
             # Need at least 3 data points to detect trend
             recent_prompts = SystemPrompt.objects.filter(
-                session=session,
+                prompt_lab=prompt_lab,
                 performance_score__isnull=False
             ).order_by('-version')[:3]
             

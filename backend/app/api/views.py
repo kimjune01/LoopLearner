@@ -753,3 +753,189 @@ class ExportSystemPromptView(EmailAPIView):
             return Response({
                 'error': 'Failed to export system prompt'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TriggerOptimizationWithDatasetView(APIView):
+    """Trigger optimization using specific evaluation datasets"""
+    
+    def post(self, request):
+        """Trigger optimization with selected datasets"""
+        from app.services.optimization_orchestrator import OptimizationOrchestrator
+        from app.services.unified_llm_provider import get_llm_provider
+        from asgiref.sync import async_to_sync
+        
+        # Validate request data
+        prompt_lab_id = request.data.get('prompt_lab_id')
+        dataset_ids = request.data.get('dataset_ids', [])
+        force = request.data.get('force', False)
+        
+        if not prompt_lab_id:
+            return Response({
+                'error': 'prompt_lab_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not dataset_ids:
+            return Response({
+                'error': 'dataset_ids must be a non-empty list'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not isinstance(dataset_ids, list):
+            return Response({
+                'error': 'dataset_ids must be a list'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Initialize orchestrator with dependencies
+            llm_provider = get_llm_provider()
+            
+            # Initialize reward aggregator
+            from app.services.reward_aggregator import RewardFunctionAggregator
+            reward_aggregator = RewardFunctionAggregator(llm_provider)
+            
+            # Initialize evaluation engine
+            from app.services.evaluation_engine import EvaluationEngine
+            evaluation_engine = EvaluationEngine(llm_provider, reward_aggregator)
+            
+            # Initialize prompt rewriter
+            from app.services.prompt_rewriter import LLMBasedPromptRewriter
+            prompt_rewriter = LLMBasedPromptRewriter(
+                rewriter_llm_provider=llm_provider,
+                similarity_llm_provider=llm_provider,
+                reward_function_aggregator=reward_aggregator,
+                meta_prompt_manager=None  # Simplified for API use
+            )
+            
+            orchestrator = OptimizationOrchestrator(
+                llm_provider=llm_provider,
+                prompt_rewriter=prompt_rewriter,
+                evaluation_engine=evaluation_engine
+            )
+            
+            # Create optimization run record
+            from core.models import OptimizationRun, PromptLab
+            from django.utils import timezone
+            
+            prompt_lab = PromptLab.objects.get(id=prompt_lab_id)
+            baseline_prompt = prompt_lab.prompts.filter(is_active=True).first()
+            
+            optimization_run = OptimizationRun.objects.create(
+                prompt_lab=prompt_lab,
+                baseline_prompt=baseline_prompt,
+                status='running',
+                datasets_used=dataset_ids,
+                test_cases_used=0  # Will be updated after optimization
+            )
+            
+            try:
+                # Trigger optimization
+                result = async_to_sync(orchestrator.trigger_optimization_with_datasets)(
+                    prompt_lab_id=prompt_lab_id,
+                    dataset_ids=dataset_ids,
+                    force=force
+                )
+                
+                # Update optimization run with results
+                optimization_run.status = 'completed'
+                optimization_run.performance_improvement = result.best_candidate.improvement * 100
+                optimization_run.test_cases_used = getattr(result, 'test_cases_used', 0)
+                optimization_run.deployed = result.best_candidate.deployed
+                optimization_run.evaluation_results = {
+                    'improvement': result.best_candidate.improvement,
+                    'datasets_used': len(dataset_ids),
+                    'test_cases_used': getattr(result, 'test_cases_used', 0),
+                    'deployed': result.best_candidate.deployed,
+                    'message': f"Optimization completed with {result.best_candidate.improvement:.1%} improvement"
+                }
+                optimization_run.completed_at = timezone.now()
+                optimization_run.save()
+                
+                # Format response with run_id for navigation
+                return Response({
+                    'status': 'success',
+                    'run_id': str(optimization_run.id),
+                    'optimization_id': str(optimization_run.id),  # Legacy compatibility
+                    'improvement': result.best_candidate.improvement,
+                    'datasets_used': len(dataset_ids),
+                    'message': f"Optimization completed with {result.best_candidate.improvement:.1%} improvement"
+                }, status=status.HTTP_200_OK)
+                
+            except Exception as optimization_error:
+                # Update optimization run to failed status
+                optimization_run.status = 'failed'
+                optimization_run.error_message = str(optimization_error)
+                optimization_run.completed_at = timezone.now()
+                optimization_run.save()
+                
+                # Re-raise the error to be handled by outer exception handler
+                raise optimization_error
+            
+        except PromptLab.DoesNotExist:
+            return Response({
+                'error': f'Prompt lab {prompt_lab_id} not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+            
+        except ValueError as e:
+            return Response({
+                'detail': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            logger.error(f"Optimization failed: {str(e)}", exc_info=True)
+            return Response({
+                'detail': 'Optimization failed',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class OptimizationRunDetailView(APIView):
+    """Get optimization run details"""
+    
+    def get(self, request, run_id):
+        """Get optimization run details by ID"""
+        try:
+            from core.models import OptimizationRun
+            
+            optimization_run = OptimizationRun.objects.select_related(
+                'prompt_lab', 'baseline_prompt', 'optimized_prompt'
+            ).get(id=run_id)
+            
+            # Format response data
+            response_data = {
+                'id': str(optimization_run.id),
+                'prompt_lab': {
+                    'id': str(optimization_run.prompt_lab.id),
+                    'name': optimization_run.prompt_lab.name
+                } if optimization_run.prompt_lab else None,
+                'status': optimization_run.status,
+                'datasets_used': optimization_run.datasets_used,
+                'test_cases_used': optimization_run.test_cases_used,
+                'performance_improvement': optimization_run.performance_improvement,
+                'deployed': optimization_run.deployed,
+                'error_message': optimization_run.error_message,
+                'started_at': optimization_run.started_at.isoformat(),
+                'completed_at': optimization_run.completed_at.isoformat() if optimization_run.completed_at else None,
+                'evaluation_results': optimization_run.evaluation_results,
+                'baseline_prompt': {
+                    'id': optimization_run.baseline_prompt.id,
+                    'content': optimization_run.baseline_prompt.content,
+                    'version': optimization_run.baseline_prompt.version
+                } if optimization_run.baseline_prompt else None,
+                'optimized_prompt': {
+                    'id': optimization_run.optimized_prompt.id,
+                    'content': optimization_run.optimized_prompt.content,
+                    'version': optimization_run.optimized_prompt.version
+                } if optimization_run.optimized_prompt else None
+            }
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except OptimizationRun.DoesNotExist:
+            return Response({
+                'error': f'Optimization run {run_id} not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving optimization run: {str(e)}")
+            return Response({
+                'error': 'Failed to retrieve optimization run details'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

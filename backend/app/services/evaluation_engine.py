@@ -510,14 +510,50 @@ class EvaluationEngine:
         self,
         baseline: SystemPrompt,
         candidates: List[SystemPrompt],
-        test_case_count: int = 10
+        test_case_count: int = 10,
+        dataset_ids: Optional[List[int]] = None,
+        evaluation_config: Optional[Any] = None
     ) -> List[ComparisonResult]:
         """Compare multiple prompt candidates against a baseline"""
         
-        # Generate test cases
-        test_cases = await self.test_suite.generate_test_cases()
-        if len(test_cases) > test_case_count:
-            test_cases = test_cases[:test_case_count]
+        # Generate test cases from datasets if provided, otherwise use default generation
+        if dataset_ids:
+            from .dataset_optimization_service import DatasetOptimizationService
+            dataset_service = DatasetOptimizationService()
+            dataset_cases = await sync_to_async(dataset_service.load_evaluation_cases)(dataset_ids, limit=test_case_count)
+            
+            # Convert dataset cases to test cases
+            test_cases = []
+            for case in dataset_cases:
+                # Create a mock Email object from the case data
+                from core.models import Email
+                mock_email = Email(
+                    subject="Evaluation Case",
+                    body=case.input_text,  # Use the actual input_text field
+                    sender="evaluation@test.com"
+                )
+                
+                test_case = EvaluationTestCase(
+                    email=mock_email,
+                    expected_qualities={
+                        'f1_score': 0.7,
+                        'semantic_similarity': 0.7,
+                        'clarity': 0.8,
+                        'professionalism': 0.8
+                    },
+                    scenario_type="dataset_based",
+                    difficulty_level="medium"
+                )
+                test_cases.append(test_case)
+            
+            logger.info(f"Using {len(test_cases)} test cases from {len(dataset_ids)} datasets")
+        else:
+            # Generate test cases using default method
+            test_cases = await self.test_suite.generate_test_cases()
+            if len(test_cases) > test_case_count:
+                test_cases = test_cases[:test_case_count]
+            
+            logger.info(f"Generated {len(test_cases)} test cases")
         
         # Run A/B tests for each candidate
         comparison_tasks = [

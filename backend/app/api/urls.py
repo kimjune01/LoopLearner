@@ -13,6 +13,8 @@ from .views import (
     GetSystemMetricsView,
     GetSystemPromptView,
     ExportSystemPromptView,
+    TriggerOptimizationWithDatasetView,
+    OptimizationRunDetailView,
 )
 from .optimization_status_controller import (
     OptimizationStatusView,
@@ -80,6 +82,8 @@ from .evaluation_controller import (
     EvaluationDraftPromoteView,
     EvaluationDraftDiscardView,
     EvaluationDraftStatusView,
+    # Optimization-related
+    EvaluationOptimizationDatasetsView,
 )
 from .llm_status_controller import LLMStatusView
 
@@ -145,6 +149,8 @@ urlpatterns = [
     
     # Optimization endpoints
     path('optimization/trigger/', TriggerOptimizationView.as_view(), name='trigger-optimization'),
+    path('optimization/trigger-with-dataset/', TriggerOptimizationWithDatasetView.as_view(), name='trigger-optimization-with-dataset'),
+    path('optimization/runs/<uuid:run_id>/', OptimizationRunDetailView.as_view(), name='optimization-run-detail'),
     path('optimization/<str:optimization_id>/status/', GetOptimizationProgressView.as_view(), name='get-optimization-status'),
     path('learning/progress/', GetOptimizationProgressView.as_view(), name='get-learning-progress'),
     
@@ -207,4 +213,7 @@ urlpatterns = [
     path('evaluations/datasets/<int:dataset_id>/drafts/<int:draft_id>/promote/', EvaluationDraftPromoteView.as_view(), name='evaluation-promote-draft'),
     path('evaluations/datasets/<int:dataset_id>/drafts/<int:draft_id>/discard/', EvaluationDraftDiscardView.as_view(), name='evaluation-discard-draft'),
     path('evaluations/drafts/status/', EvaluationDraftStatusView.as_view(), name='evaluation-draft-status'),
+    
+    # Optimization-related evaluation endpoints
+    path('evaluations/prompt-labs/<uuid:prompt_lab_id>/optimization-datasets/', EvaluationOptimizationDatasetsView.as_view(), name='evaluation-optimization-datasets'),
 ]

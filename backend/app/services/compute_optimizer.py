@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.core.cache import cache
-from core.models import Session, SystemPrompt, UserFeedback
+from core.models import PromptLab, SystemPrompt, UserFeedback
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class ComputeOptimizer:
     }
     
     # Cost controls (sensible defaults)
-    MAX_ITERATIONS_PER_SESSION = 20  # Hard stop to prevent runaway costs
+    MAX_ITERATIONS_PER_PROMPT_LAB = 20  # Hard stop to prevent runaway costs
     MAX_DAILY_ITERATIONS_PER_USER = 100  # Rate limiting per user
     CACHE_DURATION_SECONDS = 3600  # 1 hour cache for expensive operations
     
@@ -55,33 +55,33 @@ class ComputeOptimizer:
     def __init__(self):
         self.logger = logger
     
-    def should_continue_optimization(self, session: Session) -> Dict[str, Any]:
+    def should_continue_optimization(self, prompt_lab: PromptLab) -> Dict[str, Any]:
         """Determine if optimization should continue based on ROI"""
         try:
             # Check hard limits first
-            if session.optimization_iterations >= self.MAX_ITERATIONS_PER_SESSION:
+            if prompt_lab.optimization_iterations >= self.MAX_ITERATIONS_PER_PROMPT_LAB:
                 return {
                     'continue': False,
                     'reason': 'max_iterations_reached',
-                    'recommendation': 'Session has reached maximum optimization limit',
+                    'recommendation': 'Prompt lab has reached maximum optimization limit',
                     'compute_saved': True
                 }
             
             # Determine current stage
-            stage = self._determine_optimization_stage(session)
+            stage = self._determine_optimization_stage(prompt_lab)
             thresholds = self.CONVERGENCE_STAGES[stage]
             
             # Check if we meet minimum requirements for current stage
-            if session.optimization_iterations < thresholds['min_iterations']:
+            if prompt_lab.optimization_iterations < thresholds['min_iterations']:
                 return {
                     'continue': True,
                     'reason': 'insufficient_iterations',
                     'stage': stage,
-                    'iterations_needed': thresholds['min_iterations'] - session.optimization_iterations
+                    'iterations_needed': thresholds['min_iterations'] - prompt_lab.optimization_iterations
                 }
             
             # Calculate ROI metrics
-            roi_metrics = self._calculate_optimization_roi(session)
+            roi_metrics = self._calculate_optimization_roi(prompt_lab)
             
             # Progressive convergence based on stage
             improvement_rate = roi_metrics['recent_improvement_rate']
@@ -97,7 +97,7 @@ class ComputeOptimizer:
                 }
             
             # Check confidence vs compute cost
-            compute_cost_ratio = self._estimate_compute_cost_ratio(session)
+            compute_cost_ratio = self._estimate_compute_cost_ratio(prompt_lab)
             if compute_cost_ratio > 2.0:  # Costs outweigh benefits
                 return {
                     'continue': False,
@@ -125,17 +125,17 @@ class ComputeOptimizer:
                 'compute_saved': True
             }
     
-    def get_cached_optimization_result(self, session: Session, prompt_hash: str) -> Optional[Dict]:
+    def get_cached_optimization_result(self, prompt_lab: PromptLab, prompt_hash: str) -> Optional[Dict]:
         """Check if we already have optimization results for similar prompts"""
-        cache_key = f"opt_result_{session.id}_{prompt_hash}"
+        cache_key = f"opt_result_{prompt_lab.id}_{prompt_hash}"
         return cache.get(cache_key)
     
-    def cache_optimization_result(self, session: Session, prompt_hash: str, result: Dict):
+    def cache_optimization_result(self, prompt_lab: PromptLab, prompt_hash: str, result: Dict):
         """Cache optimization results to avoid recomputation"""
-        cache_key = f"opt_result_{session.id}_{prompt_hash}"
+        cache_key = f"opt_result_{prompt_lab.id}_{prompt_hash}"
         cache.set(cache_key, result, self.CACHE_DURATION_SECONDS)
     
-    def estimate_optimization_cost(self, session: Session) -> Dict[str, float]:
+    def estimate_optimization_cost(self, prompt_lab: PromptLab) -> Dict[str, float]:
         """Estimate compute costs for next optimization iteration"""
         try:
             # Base costs (example values - adjust based on your LLM pricing)
@@ -143,10 +143,10 @@ class ComputeOptimizer:
             BASE_EVALUATION_COST = 0.05    # $0.05 per evaluation
             
             # Scale costs based on complexity
-            complexity_multiplier = self._calculate_complexity_multiplier(session)
+            complexity_multiplier = self._calculate_complexity_multiplier(prompt_lab)
             
             # Estimate tokens based on prompt length
-            active_prompt = session.prompts.filter(is_active=True).first()
+            active_prompt = prompt_lab.prompts.filter(is_active=True).first()
             if active_prompt:
                 prompt_tokens = len(active_prompt.content.split()) * 1.5  # Rough estimate
                 token_cost = (prompt_tokens / 1000) * 0.002  # Example pricing
@@ -154,7 +154,7 @@ class ComputeOptimizer:
                 token_cost = 0.02  # Default
             
             optimization_cost = BASE_OPTIMIZATION_COST * complexity_multiplier + token_cost
-            evaluation_cost = BASE_EVALUATION_COST * session.emails.count() * 0.1  # Sample evaluation
+            evaluation_cost = BASE_EVALUATION_COST * prompt_lab.emails.count() * 0.1  # Sample evaluation
             
             total_cost = optimization_cost + evaluation_cost
             
@@ -211,10 +211,10 @@ class ComputeOptimizer:
             # Key doesn't exist, initialize it
             cache.set(cache_key, 1, 86400)  # 24 hour expiration
     
-    def _determine_optimization_stage(self, session: Session) -> str:
-        """Determine which optimization stage the session is in"""
-        iterations = session.optimization_iterations
-        feedback_count = session.total_feedback_collected
+    def _determine_optimization_stage(self, prompt_lab: PromptLab) -> str:
+        """Determine which optimization stage the prompt lab is in"""
+        iterations = prompt_lab.optimization_iterations
+        feedback_count = prompt_lab.total_feedback_collected
         
         if iterations >= 15 or feedback_count >= 100:
             return 'diminishing_returns'
@@ -225,7 +225,7 @@ class ComputeOptimizer:
         else:
             return 'exploration'
     
-    def _calculate_optimization_roi(self, session: Session) -> Dict[str, float]:
+    def _calculate_optimization_roi(self, prompt_lab: PromptLab) -> Dict[str, float]:
         """Calculate return on investment metrics"""
         try:
             # Get recent performance history
@@ -263,15 +263,15 @@ class ComputeOptimizer:
             self.logger.error(f"Error calculating ROI: {str(e)}")
             return {'recent_improvement_rate': 0}
     
-    def _estimate_compute_cost_ratio(self, session: Session) -> float:
+    def _estimate_compute_cost_ratio(self, prompt_lab: PromptLab) -> float:
         """Estimate ratio of compute cost to expected benefit"""
         try:
             # Get ROI metrics
-            roi = self._calculate_optimization_roi(session)
+            roi = self._calculate_optimization_roi(prompt_lab)
             improvement_rate = roi['recent_improvement_rate']
             
             # Estimate cost of next iteration
-            cost_estimate = self.estimate_optimization_cost(session)
+            cost_estimate = self.estimate_optimization_cost(prompt_lab)
             iteration_cost = cost_estimate['total_cost']
             
             # Estimate value of improvement (example: $1 per 1% improvement)
@@ -289,25 +289,25 @@ class ComputeOptimizer:
             self.logger.error(f"Error calculating cost ratio: {str(e)}")
             return 5.0  # Conservative estimate
     
-    def _calculate_complexity_multiplier(self, session: Session) -> float:
+    def _calculate_complexity_multiplier(self, prompt_lab: PromptLab) -> float:
         """Calculate complexity multiplier based on session characteristics"""
         try:
             multiplier = 1.0
             
             # More emails = more complex evaluation
-            email_count = session.emails.count()
+            email_count = prompt_lab.emails.count()
             if email_count > 50:
                 multiplier *= 1.5
             elif email_count > 20:
                 multiplier *= 1.2
             
             # Longer prompts = more tokens
-            active_prompt = session.prompts.filter(is_active=True).first()
+            active_prompt = prompt_lab.prompts.filter(is_active=True).first()
             if active_prompt and len(active_prompt.content) > 1000:
                 multiplier *= 1.3
             
             # More preferences = more complex optimization
-            preference_count = session.preferences.filter(is_active=True).count()
+            preference_count = prompt_lab.preferences.filter(is_active=True).count()
             if preference_count > 10:
                 multiplier *= 1.2
             

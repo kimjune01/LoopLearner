@@ -613,6 +613,158 @@ class OptimizationOrchestrator:
             strategy=strategy
         )
     
+    async def trigger_optimization_with_datasets(
+        self,
+        prompt_lab_id: str,
+        dataset_ids: List[int],
+        force: bool = False
+    ) -> Any:
+        """Manually trigger optimization using specific evaluation datasets
+        
+        Args:
+            prompt_lab_id: ID of the prompt lab to optimize
+            dataset_ids: List of evaluation dataset IDs to use
+            force: Whether to force optimization even if converged
+            
+        Returns:
+            Evaluation result with details of the optimization
+            
+        Raises:
+            ValueError: If no cases found in datasets
+        """
+        from .dataset_optimization_service import DatasetOptimizationService
+        from .convergence_detector import ConvergenceDetector
+        from core.models import PromptLab
+        
+        # 1. Load prompt lab
+        prompt_lab = await sync_to_async(PromptLab.objects.get)(id=prompt_lab_id)
+        
+        # Get active prompt
+        active_prompt = await sync_to_async(lambda: prompt_lab.prompts.filter(is_active=True).first())()
+        if not active_prompt:
+            raise ValueError(f"No active prompt found for prompt lab {prompt_lab_id}")
+        
+        # 2. Check if optimization is allowed (using convergence detector if available)
+        if not force and hasattr(self, 'convergence_detector'):
+            convergence = await sync_to_async(self.convergence_detector.assess_convergence)(prompt_lab)
+            if convergence.get('converged', False):
+                raise ValueError("Prompt has converged. Use force=True to override.")
+        elif not force:
+            # Simple convergence check based on whether we have a convergence detector
+            try:
+                convergence_detector = ConvergenceDetector()
+                convergence = await sync_to_async(convergence_detector.assess_convergence)(prompt_lab)
+                if convergence.get('converged', False):
+                    raise ValueError("Prompt has converged. Use force=True to override.")
+            except Exception as e:
+                logger.warning(f"Could not check convergence: {e}")
+        
+        # 3. Load dataset cases
+        dataset_service = DatasetOptimizationService()
+        test_cases = await sync_to_async(dataset_service.load_evaluation_cases)(dataset_ids)
+        
+        if not test_cases:
+            raise ValueError("No evaluation cases found in selected datasets")
+        
+        logger.info(f"Loaded {len(test_cases)} cases from {len(dataset_ids)} datasets")
+        
+        # 4. Generate candidate prompts using rewriter
+        from .prompt_rewriter import RewriteContext
+        
+        rewrite_context = RewriteContext(
+            email_scenario="dataset_based_optimization",
+            current_prompt=active_prompt,
+            recent_feedback=[],  # No user feedback for dataset-based optimization
+            performance_history={},
+            constraints={'manual_trigger': True, 'dataset_count': len(dataset_ids)}
+        )
+        
+        candidates = await self.prompt_rewriter.rewrite_prompt(
+            context=rewrite_context,
+            mode="fast"
+        )
+        
+        logger.info(f"Generated {len(candidates)} candidate prompts")
+        
+        # 6. Convert candidates to SystemPrompt objects for evaluation
+        candidate_prompts = []
+        for i, candidate in enumerate(candidates):
+            # Create temporary SystemPrompt objects for evaluation
+            from core.models import SystemPrompt
+            temp_prompt = SystemPrompt(
+                prompt_lab=prompt_lab,
+                content=candidate.content,
+                version=active_prompt.version + i + 1,
+                is_active=False
+            )
+            candidate_prompts.append(temp_prompt)
+        
+        # 7. Evaluate with datasets
+        comparison_results = await self.evaluation_engine.compare_prompt_candidates(
+            baseline=active_prompt,
+            candidates=candidate_prompts,
+            test_case_count=len(test_cases),
+            dataset_ids=dataset_ids,
+            evaluation_config=None
+        )
+        
+        # 8. Find best performing candidate
+        best_result = None
+        best_improvement = 0
+        
+        for result in comparison_results:
+            if result.improvement > best_improvement:
+                best_improvement = result.improvement
+                best_result = result
+        
+        # 9. Deploy if improved (simplified deployment)
+        deployed = False
+        deployment_threshold = 5.0  # 5% improvement threshold for manual optimization
+        
+        if best_result and best_improvement > deployment_threshold:
+            # Create and save new prompt version
+            try:
+                new_prompt = await sync_to_async(SystemPrompt.objects.create)(
+                    prompt_lab=prompt_lab,
+                    content=best_result.candidate.prompt.content,
+                    version=active_prompt.version + 1,
+                    is_active=True,
+                    performance_score=best_result.candidate.performance_score
+                )
+                
+                # Deactivate old prompt
+                active_prompt.is_active = False
+                await sync_to_async(active_prompt.save)()
+                
+                deployed = True
+                logger.info(f"Deployed new prompt with {best_improvement:.1f}% improvement")
+            except Exception as e:
+                logger.error(f"Failed to deploy prompt: {e}")
+        else:
+            logger.info(f"Not deploying: improvement {best_improvement:.1f}% below threshold {deployment_threshold:.1f}%")
+        
+        # 10. Track dataset usage
+        optimization_id = f"opt-{timezone.now().timestamp()}"
+        await sync_to_async(dataset_service.track_dataset_usage)(
+            optimization_run_id=optimization_id,
+            dataset_ids=dataset_ids,
+            results={'improvement': best_improvement, 'deployed': deployed}
+        )
+        
+        # 11. Return result
+        result = type('OptimizationResult', (), {
+            'id': optimization_id,
+            'best_candidate': type('BestCandidate', (), {
+                'improvement': best_improvement / 100.0,  # Convert to decimal for API
+                'deployed': deployed,
+                'content': best_result.candidate.prompt.content if best_result else active_prompt.content
+            })(),
+            'datasets_used': len(dataset_ids),
+            'test_cases_used': len(test_cases)
+        })()
+        
+        return result
+    
     def _select_optimization_strategy(self, trigger_analysis: Dict[str, Any], feedback_count: int) -> Dict[str, Any]:
         """Select optimization strategy based on context"""
         
@@ -683,42 +835,42 @@ class OptimizationOrchestrator:
         try:
             from app.services.convergence_detector import ConvergenceDetector
             
-            # Extract session from feedback if available
-            session = None
+            # Extract prompt lab from feedback if available
+            prompt_lab = None
             if feedback_batch:
                 first_feedback = feedback_batch[0]
                 if hasattr(first_feedback, 'draft') and hasattr(first_feedback.draft, 'email'):
-                    session = first_feedback.draft.email.session
+                    prompt_lab = first_feedback.draft.email.prompt_lab
             
-            # If no session found from feedback, get the most recently updated session
-            if not session:
-                from core.models import Session
-                session = await sync_to_async(
-                    Session.objects.filter(is_active=True).order_by('-updated_at').first
+            # If no prompt lab found from feedback, get the most recently updated prompt lab
+            if not prompt_lab:
+                from core.models import PromptLab
+                prompt_lab = await sync_to_async(
+                    PromptLab.objects.filter(is_active=True).order_by('-updated_at').first
                 )()
             
-            if not session:
-                logger.warning("No session found for convergence check - allowing optimization")
+            if not prompt_lab:
+                logger.warning("No prompt lab found for convergence check - allowing optimization")
                 return False
             
             # Initialize convergence detector
             detector = ConvergenceDetector()
             
             # Check if convergence assessment should be performed
-            should_check = await sync_to_async(detector.should_check_convergence)(session)
+            should_check = await sync_to_async(detector.should_check_convergence)(prompt_lab)
             if not should_check:
-                logger.info(f"Convergence check not needed for session {session.id}")
+                logger.info(f"Convergence check not needed for prompt lab {prompt_lab.id}")
                 return False
             
             # Perform convergence assessment
-            assessment = await sync_to_async(detector.assess_convergence)(session)
+            assessment = await sync_to_async(detector.assess_convergence)(prompt_lab)
             
             if assessment.get('converged', False):
                 confidence = assessment.get('confidence_score', 0.0)
                 factors = assessment.get('factors', {})
                 recommendations = assessment.get('recommendations', [])
                 
-                logger.info(f"Session {session.id} has converged (confidence: {confidence:.2f})")
+                logger.info(f"PromptLab {prompt_lab.id} has converged (confidence: {confidence:.2f})")
                 logger.info(f"Convergence factors: {factors}")
                 
                 # Log convergence recommendations
@@ -729,7 +881,7 @@ class OptimizationOrchestrator:
                 return True
             
             else:
-                logger.info(f"Session {session.id} has not converged - optimization can proceed")
+                logger.info(f"PromptLab {prompt_lab.id} has not converged - optimization can proceed")
                 return False
                 
         except Exception as e:

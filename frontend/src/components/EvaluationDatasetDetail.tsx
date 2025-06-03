@@ -2381,13 +2381,12 @@ const ImportDataTab: React.FC<ImportDataTabProps> = ({ datasetId, dataset, onCas
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
         <h5 className="text-sm font-medium text-gray-900 mb-2">Expected File Format (JSONL)</h5>
         <pre className="text-xs text-gray-700 bg-white p-3 rounded border overflow-x-auto">
-{`{"parameters": {"user_name": "John Smith", "issue_type": "return policy", "product": "laptop"}, "expected_output": "Hi John Smith, our return policy allows returns within 30 days of purchase for laptops."}
-{"parameters": {"user_name": "Sarah Johnson", "issue_type": "order tracking", "order_id": "ORD-12345"}, "expected_output": "Hello Sarah Johnson, you can track order ORD-12345 using the link in your confirmation email."}
-{"parameters": {"user_name": "Mike Chen", "issue_type": "cancellation", "order_id": "ORD-67890"}, "expected_output": "Hi Mike Chen, I can help you cancel order ORD-67890 within 2 hours of placement."}`}
+{JSON.stringify({"parameters": {"user_name": "John Smith", "issue_type": "return policy", "product": "laptop"}, "expected_output": "Hi John Smith, our return policy allows returns within 30 days of purchase for laptops."}) + '\n' +
+JSON.stringify({"parameters": {"user_name": "Sarah Johnson", "issue_type": "order tracking", "order_id": "ORD-12345"}, "expected_output": "Hello Sarah Johnson, you can track order ORD-12345 using the link in your confirmation email."}) + '\n' +
+JSON.stringify({"parameters": {"user_name": "Mike Chen", "issue_type": "cancellation", "order_id": "ORD-67890"}, "expected_output": "Hi Mike Chen, I can help you cancel order ORD-67890 within 2 hours of placement."})}
         </pre>
         <p className="text-xs text-gray-600 mt-2">
-          <strong>New format (recommended):</strong> Use 'parameters' object with key-value pairs that will be substituted into your prompt template.<br/>
-          <strong>Legacy format:</strong> You can still use 'input'/'expected' or 'input_text'/'expected_output' field names.
+          Each line must contain a 'parameters' object with key-value pairs that will be substituted into your prompt template, and an 'expected_output' field.
         </p>
       </div>
 
@@ -2454,9 +2453,9 @@ const ImportDataTab: React.FC<ImportDataTabProps> = ({ datasetId, dataset, onCas
         <h5 className="text-sm font-medium text-yellow-800 mb-2">Import Tips</h5>
         <ul className="text-sm text-yellow-700 space-y-1">
           <li>• Files must be in JSONL format (one JSON object per line)</li>
-          <li>• <strong>Recommended:</strong> Use 'parameters' object with key-value pairs + 'expected_output' field</li>
-          <li>• Parameters will be substituted into your active prompt template (e.g., {{user_name}} → "John Smith")</li>
-          <li>• <strong>Legacy support:</strong> Direct 'input'/'input_text' and 'expected'/'expected_output' fields still work</li>
+          <li>• Each object must have a 'parameters' field with key-value pairs</li>
+          <li>• Each object must have an 'expected_output' field with the expected response</li>
+          <li>• Parameters will be substituted into your active prompt template (e.g., {`{{user_name}}`} → "John Smith")</li>
           <li>• Maximum file size: 10MB</li>
         </ul>
       </div>
