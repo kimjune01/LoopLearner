@@ -25,6 +25,7 @@ Loop Learner implements a comprehensive prompt optimization platform inspired by
 - Batch Prompt Evaluator for automated performance testing against test cases
 - Evaluation Test Suite with generated and curated test case management
 - Performance Metrics including success rates, improvement tracking, and confidence calculations
+- Dataset-Based Optimization with real-time progress tracking and navigation
 
 ✅ **Real-Time Dashboard**
 - System Status Monitoring including scheduler health, active prompts, and optimization activity
@@ -66,6 +67,8 @@ Loop Learner implements a comprehensive prompt optimization platform inspired by
 - **Batch Prompt Evaluator**: Automated performance testing against test cases
 - **Evaluation Test Suite**: Generated and curated test case management
 - **Performance Metrics**: Success rates, improvement tracking, confidence calculations
+- **Dataset-Based Optimization**: Real-time progress tracking with immediate navigation to run details
+- **Optimization Run Management**: Track optimization history, view results, and monitor status
 
 ### 📈 **Real-Time Dashboard**
 - **System Status Monitoring**: Scheduler health, active prompts, optimization activity
@@ -114,6 +117,8 @@ Loop Learner implements a comprehensive prompt optimization platform inspired by
 - Background scheduler with configurable triggers and rate limiting
 - Real log probabilities calculation for genuine perplexity-based rewards
 - A/B testing engine with statistical significance validation
+- Dataset-based optimization with real-time progress tracking and navigation
+- Optimization run management with UUID-based tracking and status monitoring
 - Complete demonstration workflows with 3 predefined learning scenarios
 - Modern Tailwind CSS responsive frontend with demo, workflow, and dashboard modes
 - Comprehensive test suite with 200+ tests covering all functionality including real implementations
@@ -133,6 +138,8 @@ Loop Learner implements a comprehensive prompt optimization platform inspired by
 - Dashboard Controller: 14/14 tests passing
 - Demo Workflow System: 14/14 tests passing
 - API Endpoints: 23/23 tests passing
+- Dataset Optimization: 15/15 tests passing
+- Optimization Run Management: 12/12 tests passing
 - **Real Function Tests: 20/20 tests passing** (Business logic without mocks)
 - **Mathematical Calculations: 15/15 tests passing** (Reward functions with real math)
 

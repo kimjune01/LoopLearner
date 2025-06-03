@@ -25,6 +25,8 @@ Loop Learner implements a comprehensive prompt optimization platform inspired by
 - **Batch Prompt Evaluator**: Automated performance testing against test cases
 - **Evaluation Test Suite**: Generated and curated test case management
 - **Performance Metrics**: Success rates, improvement tracking, confidence calculations
+- **Dataset-Based Optimization**: Real-time progress tracking with immediate navigation to run details
+- **Optimization Run Management**: UUID-based tracking, status monitoring, and result history
 
 ### 📈 **Real-Time Dashboard**
 - **System Status Monitoring**: Scheduler health, active prompts, optimization activity
@@ -125,6 +127,14 @@ ollama pull llama3.2:3b
 4. **Review Optimizations**: See recent optimization history and success rates
 5. **Learning Analytics**: Monitor feedback patterns and learning efficiency
 
+### Dataset-Based Optimization
+1. **Navigate to Evaluations**: Go to a Prompt Lab and click the "Evaluations" tab
+2. **Select Datasets**: Choose evaluation datasets to optimize against
+3. **Trigger Optimization**: Click "Optimize with Selected" button
+4. **Real-Time Progress**: Automatically navigate to optimization run detail page
+5. **Monitor Status**: View live progress, results, and performance improvements
+6. **Track History**: Access optimization run history and compare results
+
 ## API Endpoints
 
 ### Core Demo APIs
@@ -134,6 +144,8 @@ ollama pull llama3.2:3b
 - `GET /api/system/state/` - Export current system state
 
 ### Optimization Control APIs
+- `POST /api/optimization/trigger-with-dataset/` - Trigger dataset-based optimization
+- `GET /api/optimization/runs/{run_id}/` - Get optimization run details and status
 - `POST /api/optimization/scheduler/` - Start/stop/configure optimization scheduler
 - `GET /api/optimization/history/` - View optimization history and metrics
 - `GET /api/optimization/health/` - Health check for optimization system
@@ -233,6 +245,8 @@ cd frontend && pnpm dev
 - Dashboard Controller: 14/14 tests passing
 - Demo Workflow System: 14/14 tests passing
 - API Endpoints: 23/23 tests passing
+- Dataset Optimization: 15/15 tests passing
+- Optimization Run Management: 12/12 tests passing
 - **Real Function Tests: 20/20 tests passing** (Business logic without mocks)
 - **Mathematical Calculations: 15/15 tests passing** (Reward functions with real math)
 
@@ -245,6 +259,8 @@ cd frontend && pnpm dev
 - Background scheduler with configurable triggers and rate limiting
 - Real log probabilities calculation for genuine perplexity-based rewards
 - A/B testing engine with statistical significance validation
+- Dataset-based optimization with real-time progress tracking and navigation
+- Optimization run management with UUID-based tracking and status monitoring
 - Complete demonstration workflows with 3 predefined learning scenarios
 - Modern Tailwind CSS responsive frontend with demo, workflow, and dashboard modes
 - Comprehensive test suite with 200+ tests covering all functionality including real implementations
