@@ -81,11 +81,44 @@ export class OptimizationService {
    */
   async getOptimizationRun(runId: string): Promise<any> {
     try {
-      const response = await api.get(`/optimization/runs/${runId}/`);
+      const response = await api.get(`/optimization/runs/${runId}/`, {
+        params: {
+          _t: Date.now() // Cache busting parameter
+        }
+      });
       return response.data;
     } catch (error: any) {
       console.error('Error fetching optimization run:', error);
       throw new Error(error.response?.data?.error || 'Failed to fetch optimization run details');
+    }
+  }
+
+  /**
+   * Cancel a running optimization
+   */
+  async cancelOptimization(runId: string): Promise<any> {
+    try {
+      const response = await api.post(`/optimization/runs/${runId}/cancel/`);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error cancelling optimization:', error);
+      throw new Error(error.response?.data?.error || 'Failed to cancel optimization');
+    }
+  }
+
+  /**
+   * Get running optimizations for a prompt lab
+   */
+  async getRunningOptimizations(promptLabId: string): Promise<any[]> {
+    try {
+      // Use the new prompt lab optimizations endpoint
+      const response = await api.get(`/prompt-labs/${promptLabId}/optimizations/`);
+      
+      // Filter for running optimizations
+      return response.data.filter((run: any) => run.status === 'running' || run.status === 'pending');
+    } catch (error: any) {
+      console.error('Error fetching running optimizations:', error);
+      return [];
     }
   }
 }

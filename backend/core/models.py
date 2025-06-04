@@ -214,6 +214,17 @@ class OptimizationRun(models.Model):
     performance_improvement = models.FloatField(null=True, blank=True)  # Percentage improvement
     deployed = models.BooleanField(default=False)  # Whether the optimized prompt was deployed
     
+    # Progress tracking
+    progress_data = models.JSONField(default=dict, blank=True)  # Real-time progress metrics
+    current_step = models.CharField(max_length=100, blank=True)  # Current optimization step
+    
+    # Detailed metrics tracking
+    detailed_metrics = models.JSONField(default=dict, blank=True)  # Comprehensive metrics breakdown
+    candidate_metrics = models.JSONField(default=list, blank=True)  # Performance data for all candidates tested
+    threshold_analysis = models.JSONField(default=dict, blank=True)  # Threshold and deployment decision analysis
+    statistical_analysis = models.JSONField(default=dict, blank=True)  # Statistical significance and confidence data
+    cost_analysis = models.JSONField(default=dict, blank=True)  # Cost and ROI analysis
+    
     # Metadata
     error_message = models.TextField(blank=True)
     started_at = models.DateTimeField(default=timezone.now)

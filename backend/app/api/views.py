@@ -818,6 +818,20 @@ class TriggerOptimizationWithDatasetView(APIView):
             prompt_lab = PromptLab.objects.get(id=prompt_lab_id)
             baseline_prompt = prompt_lab.prompts.filter(is_active=True).first()
             
+            # Check for existing running optimization for this prompt lab
+            if not force:
+                existing_optimization = OptimizationRun.objects.filter(
+                    prompt_lab=prompt_lab,
+                    status__in=['pending', 'running']
+                ).first()
+                
+                if existing_optimization:
+                    return Response({
+                        'error': 'An optimization is already running for this prompt lab. Only one optimization per lab is allowed.',
+                        'existing_run_id': str(existing_optimization.id),
+                        'existing_status': existing_optimization.status
+                    }, status=status.HTTP_409_CONFLICT)
+            
             optimization_run = OptimizationRun.objects.create(
                 prompt_lab=prompt_lab,
                 baseline_prompt=baseline_prompt,
@@ -827,22 +841,23 @@ class TriggerOptimizationWithDatasetView(APIView):
             )
             
             try:
-                # Trigger optimization
+                # Trigger optimization with progress tracking
                 result = async_to_sync(orchestrator.trigger_optimization_with_datasets)(
                     prompt_lab_id=prompt_lab_id,
                     dataset_ids=dataset_ids,
-                    force=force
+                    force=force,
+                    optimization_run_id=str(optimization_run.id)
                 )
                 
                 # Update optimization run with results
                 optimization_run.status = 'completed'
                 optimization_run.performance_improvement = result.best_candidate.improvement * 100
-                optimization_run.test_cases_used = getattr(result, 'test_cases_used', 0)
+                optimization_run.test_cases_used = result.test_cases_used
                 optimization_run.deployed = result.best_candidate.deployed
                 optimization_run.evaluation_results = {
                     'improvement': result.best_candidate.improvement,
                     'datasets_used': len(dataset_ids),
-                    'test_cases_used': getattr(result, 'test_cases_used', 0),
+                    'test_cases_used': result.test_cases_used,
                     'deployed': result.best_candidate.deployed,
                     'message': f"Optimization completed with {result.best_candidate.improvement:.1%} improvement"
                 }
@@ -918,13 +933,22 @@ class OptimizationRunDetailView(APIView):
                 'baseline_prompt': {
                     'id': optimization_run.baseline_prompt.id,
                     'content': optimization_run.baseline_prompt.content,
-                    'version': optimization_run.baseline_prompt.version
+                    'version': optimization_run.baseline_prompt.version,
+                    'parameters': optimization_run.baseline_prompt.parameters if optimization_run.baseline_prompt.parameters else []
                 } if optimization_run.baseline_prompt else None,
                 'optimized_prompt': {
                     'id': optimization_run.optimized_prompt.id,
                     'content': optimization_run.optimized_prompt.content,
-                    'version': optimization_run.optimized_prompt.version
-                } if optimization_run.optimized_prompt else None
+                    'version': optimization_run.optimized_prompt.version,
+                    'parameters': optimization_run.optimized_prompt.parameters if optimization_run.optimized_prompt.parameters else []
+                } if optimization_run.optimized_prompt else None,
+                
+                # Detailed metrics
+                'detailed_metrics': optimization_run.detailed_metrics,
+                'candidate_metrics': optimization_run.candidate_metrics,
+                'threshold_analysis': optimization_run.threshold_analysis,
+                'statistical_analysis': optimization_run.statistical_analysis,
+                'cost_analysis': optimization_run.cost_analysis
             }
             
             return Response(response_data, status=status.HTTP_200_OK)
@@ -938,4 +962,96 @@ class OptimizationRunDetailView(APIView):
             logger.error(f"Error retrieving optimization run: {str(e)}")
             return Response({
                 'error': 'Failed to retrieve optimization run details'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PromptLabOptimizationsView(APIView):
+    """Get optimizations for a specific prompt lab"""
+    
+    def get(self, request, prompt_lab_id):
+        """Get all optimizations for a prompt lab"""
+        try:
+            from core.models import OptimizationRun
+            
+            # Get all optimization runs for this prompt lab with related prompts
+            optimizations = OptimizationRun.objects.filter(
+                prompt_lab_id=prompt_lab_id
+            ).select_related('baseline_prompt', 'optimized_prompt').order_by('-started_at')
+            
+            # Format response
+            data = []
+            for opt in optimizations:
+                data.append({
+                    'id': str(opt.id),
+                    'status': opt.status,
+                    'started_at': opt.started_at.isoformat(),
+                    'completed_at': opt.completed_at.isoformat() if opt.completed_at else None,
+                    'datasets_used': opt.datasets_used,
+                    'test_cases_used': opt.test_cases_used,
+                    'performance_improvement': opt.performance_improvement,
+                    'deployed': opt.deployed,
+                    'error_message': opt.error_message,
+                    'current_step': opt.current_step,
+                    'progress_data': opt.progress_data,
+                    'baseline_prompt': {
+                        'id': opt.baseline_prompt.id if opt.baseline_prompt else None,
+                        'content': opt.baseline_prompt.content if opt.baseline_prompt else None,
+                        'version': opt.baseline_prompt.version if opt.baseline_prompt else None,
+                        'parameters': opt.baseline_prompt.parameters if (opt.baseline_prompt and opt.baseline_prompt.parameters) else []
+                    } if opt.baseline_prompt else None,
+                    'optimized_prompt': {
+                        'id': opt.optimized_prompt.id if opt.optimized_prompt else None,
+                        'content': opt.optimized_prompt.content if opt.optimized_prompt else None,
+                        'version': opt.optimized_prompt.version if opt.optimized_prompt else None,
+                        'parameters': opt.optimized_prompt.parameters if (opt.optimized_prompt and opt.optimized_prompt.parameters) else []
+                    } if opt.optimized_prompt else None
+                })
+            
+            return Response(data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error fetching prompt lab optimizations: {str(e)}")
+            return Response({
+                'error': 'Failed to fetch optimizations'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CancelOptimizationView(APIView):
+    """Cancel a running optimization"""
+    
+    def post(self, request, run_id):
+        """Cancel an optimization run by ID"""
+        try:
+            from core.models import OptimizationRun
+            
+            optimization_run = OptimizationRun.objects.get(id=run_id)
+            
+            # Check if optimization can be cancelled
+            if optimization_run.status not in ['pending', 'running']:
+                return Response({
+                    'error': f'Cannot cancel optimization with status: {optimization_run.status}',
+                    'current_status': optimization_run.status
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update status to cancelled
+            optimization_run.status = 'failed'  # Use failed status as cancelled
+            optimization_run.error_message = 'Optimization cancelled by user'
+            optimization_run.completed_at = timezone.now()
+            optimization_run.save()
+            
+            return Response({
+                'message': 'Optimization cancelled successfully',
+                'run_id': str(optimization_run.id),
+                'status': optimization_run.status
+            }, status=status.HTTP_200_OK)
+            
+        except OptimizationRun.DoesNotExist:
+            return Response({
+                'error': f'Optimization run {run_id} not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+            
+        except Exception as e:
+            logger.error(f"Error cancelling optimization run: {str(e)}")
+            return Response({
+                'error': 'Failed to cancel optimization run'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

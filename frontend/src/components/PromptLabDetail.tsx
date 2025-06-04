@@ -33,6 +33,7 @@ export const PromptLabDetail: React.FC = () => {
   const [selectedDatasetIds, setSelectedDatasetIds] = useState<number[]>([]);
   const [optimizationLoading, setOptimizationLoading] = useState(false);
   const [optimizationResult, setOptimizationResult] = useState<string | null>(null);
+  const [showOptimizationModal, setShowOptimizationModal] = useState(false);
   
   const navigate = useNavigate();
 
@@ -297,7 +298,15 @@ ${promptLab.active_prompt.content}
 
   const handleTriggerOptimization = async () => {
     if (!id || selectedDatasetIds.length === 0) return;
+    
+    // Show confirmation modal
+    setShowOptimizationModal(true);
+  };
 
+  const handleConfirmOptimization = async () => {
+    if (!id || selectedDatasetIds.length === 0) return;
+
+    setShowOptimizationModal(false);
     setOptimizationLoading(true);
     setOptimizationResult(null);
 
@@ -308,18 +317,26 @@ ${promptLab.active_prompt.content}
         force: false
       });
 
-      // Navigate immediately to the optimization run detail page
-      if (result.run_id || result.optimization_id) {
-        const runId = result.run_id || result.optimization_id;
-        navigate(`/prompt-labs/${id}/optimization/runs/${runId}`);
+      // Navigate to learning progress tab immediately
+      setActiveTab('progress');
+      navigate(`/prompt-labs/${id}?tab=progress`, { replace: true });
+      
+      // Clear selection after successful optimization
+      setSelectedDatasetIds([]);
+      
+      // If we have a run_id, navigate directly to the optimization run detail page
+      if (result.run_id) {
+        // Small delay to let the progress tab load, then navigate to the specific run
+        setTimeout(() => {
+          navigate(`/prompt-labs/${id}/optimization/runs/${result.run_id}`);
+        }, 1000);
       } else {
-        // Fallback for old API response format
-        setOptimizationResult(`Optimization completed! ${result.message}`);
-        setSelectedDatasetIds([]); // Clear selection after successful optimization
-        
-        // Reload prompt lab to show updated prompt
-        await loadPromptLab();
+        // Show success message if no run_id
+        setOptimizationResult(`Optimization started! ${result.message || 'View progress in the Learning Progress tab.'}`);
       }
+      
+      // Reload prompt lab to get latest data
+      await loadPromptLab();
     } catch (err: any) {
       console.error('Optimization error:', err);
       const errorMessage = err.message || 'Optimization failed. Please try again.';
@@ -459,7 +476,10 @@ ${promptLab.active_prompt.content}
       <div className="max-w-7xl mx-auto bg-white shadow-sm border-b">
         <nav className="flex space-x-8 px-8">
           <button
-            onClick={() => setActiveTab('prompt')}
+            onClick={() => {
+              setActiveTab('prompt');
+              navigate(`/prompt-labs/${id}?tab=prompt`, { replace: true });
+            }}
             className={`py-4 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'prompt'
                 ? 'border-purple-500 text-purple-600'
@@ -469,7 +489,10 @@ ${promptLab.active_prompt.content}
             System Prompt
           </button>
           <button
-            onClick={() => setActiveTab('progress')}
+            onClick={() => {
+              setActiveTab('progress');
+              navigate(`/prompt-labs/${id}?tab=progress`, { replace: true });
+            }}
             className={`py-4 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'progress'
                 ? 'border-purple-500 text-purple-600'
@@ -479,7 +502,10 @@ ${promptLab.active_prompt.content}
             Learning Progress
           </button>
           <button
-            onClick={() => setActiveTab('evaluations')}
+            onClick={() => {
+              setActiveTab('evaluations');
+              navigate(`/prompt-labs/${id}?tab=evaluations`, { replace: true });
+            }}
             className={`py-4 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'evaluations'
                 ? 'border-purple-500 text-purple-600'
@@ -1026,6 +1052,93 @@ ${promptLab.active_prompt.content}
             navigate(`/evaluation/datasets/${datasetId}`);
           }}
         />
+      )}
+
+      {/* Optimization Confirmation Modal */}
+      {showOptimizationModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setShowOptimizationModal(false)}></div>
+            
+            <div className="relative w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+              <div className="mb-6">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">Confirm Prompt Optimization</h3>
+                </div>
+                
+                <div className="space-y-4 text-gray-700">
+                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                    <h4 className="font-semibold text-purple-900 mb-2">What will happen:</h4>
+                    <ul className="space-y-2 text-sm">
+                      <li className="flex items-start gap-2">
+                        <svg className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Your current prompt will be analyzed using {selectedDatasetIds.length} evaluation dataset{selectedDatasetIds.length > 1 ? 's' : ''}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <svg className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>AI will generate improved versions of your prompt based on the evaluation results</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <svg className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>If improvements are found, a new version of your prompt will be created and activated</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <svg className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Your current prompt (v{promptLab?.active_prompt?.version || 1}) will be archived for reference</span>
+                      </li>
+                    </ul>
+                  </div>
+                  
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <div className="flex items-start gap-2">
+                      <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="text-sm">
+                        <p className="font-medium text-blue-900 mb-1">Note:</p>
+                        <p className="text-blue-800">This process may take a few minutes. You'll be redirected to the Learning Progress tab to monitor the optimization.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowOptimizationModal(false)}
+                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmOptimization}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Start Optimization
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

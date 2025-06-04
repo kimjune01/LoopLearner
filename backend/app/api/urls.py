@@ -15,6 +15,8 @@ from .views import (
     ExportSystemPromptView,
     TriggerOptimizationWithDatasetView,
     OptimizationRunDetailView,
+    CancelOptimizationView,
+    PromptLabOptimizationsView,
 )
 from .optimization_status_controller import (
     OptimizationStatusView,
@@ -92,6 +94,7 @@ urlpatterns = [
     path('prompt-labs/', PromptLabListView.as_view(), name='prompt-lab-list'),
     path('prompt-labs/<uuid:prompt_lab_id>/', PromptLabDetailView.as_view(), name='prompt-lab-detail'),
     path('prompt-labs/<uuid:prompt_lab_id>/export/', PromptLabExportView.as_view(), name='prompt-lab-export'),
+    path('prompt-labs/<uuid:prompt_lab_id>/optimizations/', PromptLabOptimizationsView.as_view(), name='prompt-lab-optimizations'),
     path('prompt-labs/import/', PromptLabImportView.as_view(), name='prompt-lab-import'),
     path('prompt-labs/<uuid:prompt_lab_id>/duplicate/', PromptLabDuplicateView.as_view(), name='prompt-lab-duplicate'),
     path('prompt-labs/<uuid:prompt_lab_id>/stats/', PromptLabStatsView.as_view(), name='prompt-lab-stats'),
@@ -151,6 +154,7 @@ urlpatterns = [
     path('optimization/trigger/', TriggerOptimizationView.as_view(), name='trigger-optimization'),
     path('optimization/trigger-with-dataset/', TriggerOptimizationWithDatasetView.as_view(), name='trigger-optimization-with-dataset'),
     path('optimization/runs/<uuid:run_id>/', OptimizationRunDetailView.as_view(), name='optimization-run-detail'),
+    path('optimization/runs/<uuid:run_id>/cancel/', CancelOptimizationView.as_view(), name='cancel-optimization'),
     path('optimization/<str:optimization_id>/status/', GetOptimizationProgressView.as_view(), name='get-optimization-status'),
     path('learning/progress/', GetOptimizationProgressView.as_view(), name='get-learning-progress'),
     
