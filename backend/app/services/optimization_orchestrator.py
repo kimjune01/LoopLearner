@@ -16,6 +16,8 @@ from .prompt_rewriter import PromptRewriter, RewriteContext, RewriteCandidate
 from .evaluation_engine import EvaluationEngine
 from .reward_aggregator import RewardFunctionAggregator
 from .unified_llm_provider import BaseLLMProvider
+from .optimization_progress import OptimizationProgressReporter
+from .metrics_collector import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -617,7 +619,8 @@ class OptimizationOrchestrator:
         self,
         prompt_lab_id: str,
         dataset_ids: List[int],
-        force: bool = False
+        force: bool = False,
+        optimization_run_id: Optional[str] = None
     ) -> Any:
         """Manually trigger optimization using specific evaluation datasets
         
@@ -625,16 +628,38 @@ class OptimizationOrchestrator:
             prompt_lab_id: ID of the prompt lab to optimize
             dataset_ids: List of evaluation dataset IDs to use
             force: Whether to force optimization even if converged
+            optimization_run_id: Optional ID for tracking optimization progress
             
         Returns:
             Evaluation result with details of the optimization
             
         Raises:
-            ValueError: If no cases found in datasets
+            ValueError: If no cases found in datasets or other errors occur
         """
         from .dataset_optimization_service import DatasetOptimizationService
         from .convergence_detector import ConvergenceDetector
-        from core.models import PromptLab
+        from core.models import PromptLab, OptimizationRun
+        
+        # Initialize progress reporter and metrics collector
+        progress_reporter = None
+        metrics_collector = MetricsCollector()
+        
+        if optimization_run_id:
+            progress_reporter = OptimizationProgressReporter(optimization_run_id)
+        
+        async def update_error_status(error_message: str, step: str = None):
+            """Helper function to update optimization run with error information"""
+            if optimization_run_id:
+                try:
+                    optimization_run = await sync_to_async(OptimizationRun.objects.get)(id=optimization_run_id)
+                    optimization_run.status = 'failed'
+                    optimization_run.error_message = f"[{step or 'Unknown'}] {error_message}" if step else error_message
+                    optimization_run.current_step = step or optimization_run.current_step
+                    optimization_run.completed_at = timezone.now()
+                    await sync_to_async(optimization_run.save)()
+                    logger.error(f"Optimization {optimization_run_id} failed at {step}: {error_message}")
+                except Exception as e:
+                    logger.error(f"Failed to update error status: {e}")
         
         # 1. Load prompt lab
         prompt_lab = await sync_to_async(PromptLab.objects.get)(id=prompt_lab_id)
